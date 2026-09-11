@@ -1,0 +1,139 @@
+@font-face {
+    font-family: 'Vazirmatn';
+    src: url('../fonts/Vazirmatn-Light.woff2') format('woff2');
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Vazirmatn';
+    src: url('../fonts/Vazirmatn-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Vazirmatn';
+    src: url('../fonts/Vazirmatn-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Vazirmatn';
+    src: url('../fonts/Vazirmatn-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Vazirmatn';
+    src: url('../fonts/Vazirmatn-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+html, body {
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    background-color: #f5f6f8;
+}
+
+.am-sidebar {
+    min-height: 100vh;
+    background: #1e2433;
+}
+
+.am-sidebar .nav-link {
+    color: #a6adc4;
+    border-radius: .5rem;
+    margin-bottom: .15rem;
+}
+
+.am-sidebar .nav-link:hover {
+    color: #fff;
+    background: #2b3348;
+}
+
+.am-sidebar .nav-link.active {
+    color: #fff;
+    background: #3b5bdb;
+}
+
+.am-sidebar .brand {
+    color: #fff;
+    font-weight: 700;
+}
+
+.am-topbar {
+    background: #fff;
+    border-bottom: 1px solid #e3e5eb;
+}
+
+.am-card {
+    border: 1px solid #e3e5eb;
+    border-radius: .75rem;
+}
+
+/*
+ * Status/security badge palette. The five meta-states (Enabled/Active, Disabled,
+ * Unknown, Not Set, Not Applicable) must stay visually distinguishable per the
+ * product spec (sec. 9/53) — they carry different meanings and must never look alike.
+ */
+.badge-status-active,
+.badge-enabled {
+    background-color: #198754;
+    color: #fff;
+}
+
+.badge-status-suspended { background-color: #fd7e14; color: #fff; }
+.badge-status-closed { background-color: #343a40; color: #fff; }
+.badge-status-abandoned { background-color: #8d6e63; color: #fff; }
+.badge-status-pending { background-color: #0dcaf0; color: #212529; }
+
+/* Disabled: a known, confirmed negative state — solid and clearly distinct from Unknown. */
+.badge-status-disabled,
+.badge-disabled {
+    background-color: #dc3545;
+    color: #fff;
+}
+
+/* Unknown: value exists but is not known to us — outlined, not filled. */
+.badge-status-unknown,
+.badge-unknown {
+    background-color: #fff;
+    color: #6c757d;
+    border: 1px solid #6c757d;
+}
+
+/* Not Set: no value has been entered yet — dashed border, muted. */
+.badge-not-set {
+    background-color: #f8f9fa;
+    color: #868e96;
+    border: 1px dashed #ced4da;
+    font-style: italic;
+}
+
+/* Not Applicable: this field does not apply to this entity — faded, does not read as a problem. */
+.badge-not-applicable {
+    background-color: transparent;
+    color: #adb5bd;
+    border: 1px solid transparent;
+    font-style: italic;
+}
+
+/* Category/Type value (Work, Personal, Paid, Monthly, ...): a known, neutral
+   classification — must not look like the literal "Unknown" state above. */
+.badge-category {
+    background-color: #e7f1ff;
+    color: #0d6efd;
+    border: 1px solid #b6d4fe;
+}
+
+main.am-content {
+    padding: 1.5rem;
+}

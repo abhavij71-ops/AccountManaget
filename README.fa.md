@@ -1,0 +1,115 @@
+<div dir="rtl" align="right">
+
+# Account Manager
+
+**یک سیستم شخصی مبتنی بر PHP + SQLite برای مدیریت تمام ایمیل‌ها، سرویس‌ها، اکانت‌ها و شماره‌تلفن‌های شما — و روابط بین آن‌ها.**
+
+🇬🇧 [Read in English](README.md)
+
+> Account Manager یک Password Manager **نیست**. هیچ‌وقت رمز عبور، API Key، CVV یا شماره کامل کارت بانکی ذخیره نمی‌کند — فقط اشاره‌ای به محل نگهداری Credential (مثلاً «KeePass / GitHub Work»). به بخش [امنیت و محدودیت‌های عمدی](#امنیت-و-محدودیت‌های-عمدی) مراجعه کنید.
+
+---
+
+## چرا این پروژه ساخته شد
+
+اگر تا حالا سعی کرده‌اید با گشتن در حافظه‌تان جواب بدهید «با کدام ایمیل توی این سایت ثبت‌نام کردم؟» یا «الان واقعاً چند Subscription پولی فعال دارم؟»، این ابزار برای شماست. یک مکان واحد برای ثبت:
+
+- هر **Email** که استفاده می‌کنید، با وضعیت امنیتی مستقل خودش و یک امتیاز امنیتی محاسبه‌شده
+- هر **Service** (وب‌سایت/پلتفرم) که در آن اکانت دارید
+- هر **Account**، متصل به دقیقاً یک Email و یک Service، با جزئیات امنیت، بازیابی، Subscription و مرجع پرداخت خودش
+- هر **شماره تلفن**، و هر Email/Account که به آن متصل است
+
+...و از هرکدام از این‌ها، بلافاصله ببینید به چه چیزهای دیگری متصل است — هرگز بیش از یک کلیک فاصله.
+
+برای توضیح کامل‌تر به [docs/ABOUT.fa.md](docs/ABOUT.fa.md) مراجعه کنید — برای چه کسانی مناسب است و چه کاربردهای واقعی دارد. سند مشخصات کامل محصول که این برنامه بر اساس آن ساخته شده، در فایل [masster.md](masster.md) موجود است.
+
+## امکانات
+
+- **ناوبری رابطه‌محور** — از هر پروفایل Email، Service، Account یا Phone مستقیماً به هر چیز مرتبط با آن بروید
+- **امتیاز امنیتی Email** — فقط بر اساس وضعیت 2FA/Passkey/Recovery خود Email محاسبه می‌شود، هرگز از اکانت‌های مرتبط تأثیر نمی‌گیرد
+- **موتور Needs Attention** — مسائل بحرانی/هشدار/اطلاع‌رسانی (2FA غیرفعال، نبود Recovery، Renewal نزدیک یا عقب‌افتاده، پروفایل ناقص) — با استثنای صحیح رکوردهای Closed/Abandoned/آرشیوشده
+- **داشبورد** — تعداد هر Entity، وضعیت امنیتی مستقل Email در برابر Account، تمدیدهای Subscription، هزینه به‌تفکیک ارز، فعالیت‌های اخیر، اقدامات سریع
+- **جستجوی سراسری** — تطبیق جزئی روی آدرس ایمیل، نام کاربری، نام سرویس، شماره تلفن، برچسب‌ها، یادداشت‌ها، فیلدهای سفارشی و مرجع پرداخت
+- **برچسب، فیلد سفارشی (روی هر اکانت، بدون محدودیت تعداد) و یادداشت آزاد** روی هر Entity
+- **تاریخچه کامل** برای هر تغییر مهم — تغییر وضعیت، تغییر 2FA، تغییر Subscription، اتصال/قطع اتصال، آرشیو/حذف
+- **Import از فایل CSV** با تطبیق ستون، اعتبارسنجی و تشخیص New / Exact Duplicate / Possible Duplicate — هرگز بدون تأیید صریح شما رکورد موجود را بازنویسی نمی‌کند
+- **تمایز کامل Archive از Delete از Unlink** در همه‌جا، هرکدام با پیام تأیید
+- مدل پنج‌وضعیتی فیلدها (**Enabled / Disabled / Unknown / Not Set / Not Applicable**) که همیشه به‌صورت بصری از هم متمایز نمایش داده می‌شوند
+- Bootstrap 5 RTL + فونت Vazirmatn به‌صورت لوکال — بدون هیچ فراخوانی CDN خارجی
+
+## پشته فناوری
+
+| لایه | انتخاب |
+|---|---|
+| Backend | PHP 8.x خالص — بدون فریم‌ورک، بدون نیاز به Composer |
+| دیتابیس | SQLite (از طریق PDO، همه‌جا Prepared Statement) |
+| Frontend | Bootstrap 5 RTL + جاوااسکریپت ساده (بدون build، بدون CDN خارجی) |
+| فونت | Vazirmatn، میزبانی‌شده به‌صورت لوکال |
+| احراز هویت | مبتنی بر Session، یک حساب مدیر |
+| هاستینگ | هر هاست اشتراکی PHP 8.x با پشتیبانی SQLite — بدون نیاز به SSH |
+
+## شروع سریع
+
+```bash
+# ۱. کل پروژه را روی هاست PHP خود آپلود کنید (یا با سرور داخلی PHP به‌صورت لوکال اجرا کنید)
+php -S localhost:8000
+
+# ۲. install.php را در مرورگر باز کرده و حساب مدیر را بسازید
+#    مثلاً http://localhost:8000/install.php
+
+# ۳. پس از اتمام نصب، فایل install.php را حذف کنید
+```
+
+راهنمای کامل گام‌به‌گام (شامل نکات هاست اشتراکی و محافظت لازم از پوشه `data/`) در **[docs/INSTALLATION.fa.md](docs/INSTALLATION.fa.md)** موجود است.
+
+## ساختار پروژه
+
+```
+accountmanager/
+├── install.php, login.php, logout.php, index.php   ← نقاط ورود (ریشه پروژه)
+├── search.php, needs-attention.php, settings.php,
+│   import-export.php                                 ← سایر صفحات سطح ریشه
+├── config.php, db.php                                 ← تنظیمات + اتصال PDO
+├── includes/                                           ← توابع مشترک، header/footer، احراز هویت
+│   └── partials/                                       ← قطعات UI قابل استفاده مجدد
+├── modules/
+│   ├── emails/  services/  phones/  accounts/          ← index/add/edit/view برای هر Entity
+│   └── import/                                         ← ویزارد Import از CSV
+├── assets/                                             ← Bootstrap 5 RTL (لوکال)، فونت Vazirmatn، app.css
+└── data/                                                ← دیتابیس SQLite (خارج از دسترس مستقیم وب)
+```
+
+## امنیت و محدودیت‌های عمدی
+
+- **هیچ Secret واقعی ذخیره نمی‌شود.** هیچ فیلدی برای رمز عبور، API Key، Access Token، کد بازیابی واقعی، CVV یا شماره کامل کارت در schema یا UI وجود ندارد — فقط اشاره‌های متنی `Credential Storage` / `Credential Reference` (مثلاً «1Password / Work vault») و **۴ رقم آخر** کارت.
+- تمام دسترسی به دیتابیس از طریق PDO Prepared Statement انجام می‌شود.
+- روی هر فرم تغییردهنده وضعیت، CSRF Token وجود دارد؛ رمز عبور با `password_hash()` هش می‌شود.
+- پوشه `data/` (محل فایل SQLite) با `.htaccess` از دسترسی مستقیم وب مسدود شده است.
+- این پروژه عمداً موارد زیر **نیست**: Password Manager، سیستم چندکاربره، یا ابزاری که به اکانت‌های واقعی شما متصل شود. فقط اطلاعات *درباره* آن‌ها را ذخیره می‌کند.
+
+## نقشه راه
+
+موارد زیر عمداً به نسخه بعدی موکول شده‌اند:
+
+- Import از فایل TXT
+- Export (CSV/TXT) برای Emails، Accounts، Services، Subscriptions و گزارش امنیتی
+- Templateهای قابل استفاده مجدد برای Import
+
+## مشارکت
+
+Issue و Pull Request خوش‌آمد است. لطفاً سبک کد جدید را با کد موجود هماهنگ نگه دارید: بدون فریم‌ورک، فقط PDO Prepared Statement، و بدون هیچ Secret در schema، UI یا تاریخچه.
+
+## مجوز
+
+MIT — به فایل [LICENSE](LICENSE) مراجعه کنید.
+
+## تماس و پشتیبانی
+
+- [ruwadmarketing.com](https://ruwadmarketing.com)
+- [navidiranian.com](https://navidiranian.com)
+- [navidiranian.co.ir](https://navidiranian.co.ir)
+- [joomlafaris.co.ir](https://joomlafaris.co.ir)
+- [cmssupport.ir](https://cmssupport.ir)
+- [cmsbaz.ir](https://cmsbaz.ir)
+
+</div>

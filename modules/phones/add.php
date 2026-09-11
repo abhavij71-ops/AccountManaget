@@ -1,0 +1,126 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/helpers.php';
+
+requireLogin();
+
+$pdo = db();
+$errors = [];
+$form = [
+    'phone_number' => '',
+    'country' => '',
+    'label' => '',
+    'status' => 'Unknown',
+    'is_primary' => '',
+    'notes' => '',
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+    }
+
+    foreach (array_keys($form) as $key) {
+        if ($key === 'is_primary') {
+            continue;
+        }
+        $form[$key] = trim((string) ($_POST[$key] ?? ''));
+    }
+    $form['is_primary'] = isset($_POST['is_primary']) ? '1' : '';
+
+    if ($form['phone_number'] === '') {
+        $errors[] = 'شماره تلفن الزامی است.';
+    }
+    if (!array_key_exists($form['status'], PHONE_STATUSES)) {
+        $errors[] = 'وضعیت نامعتبر است.';
+    }
+
+    if (!$errors) {
+        try {
+            $pdo->beginTransaction();
+
+            $stmt = $pdo->prepare('INSERT INTO phones (phone_number, country, label, status, is_primary, notes)
+                VALUES (:phone_number, :country, :label, :status, :is_primary, :notes)');
+            $stmt->execute([
+                'phone_number' => $form['phone_number'],
+                'country' => $form['country'] !== '' ? $form['country'] : null,
+                'label' => $form['label'] !== '' ? $form['label'] : null,
+                'status' => $form['status'],
+                'is_primary' => $form['is_primary'] === '1' ? 1 : 0,
+                'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+            ]);
+            $newId = (int) $pdo->lastInsertId();
+            log_history($pdo, 'phone', $newId, 'Phone Created');
+
+            $pdo->commit();
+            flashSet('success', 'شماره تلفن با موفقیت ثبت شد.');
+            header('Location: view.php?id=' . $newId);
+            exit;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            if (str_contains($e->getMessage(), 'UNIQUE')) {
+                $errors[] = 'این شماره تلفن قبلاً ثبت شده است.';
+            } else {
+                $errors[] = 'خطا در ثبت شماره تلفن: ' . $e->getMessage();
+            }
+        }
+    }
+}
+
+$csrf = csrfToken();
+$pageTitle = 'افزودن شماره تلفن';
+require __DIR__ . '/../../includes/header.php';
+?>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0">افزودن شماره تلفن</h1>
+    <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست</a>
+</div>
+
+<?php if ($errors): ?>
+    <div class="alert alert-danger">
+        <ul class="mb-0">
+            <?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?>
+        </ul>
+    </div>
+<?php endif; ?>
+
+<form method="post" novalidate>
+    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+    <div class="card am-card mb-3">
+        <div class="card-body row g-3">
+            <div class="col-md-6">
+                <label class="form-label">شماره تلفن *</label>
+                <input type="text" name="phone_number" class="form-control" required value="<?= e($form['phone_number']) ?>" placeholder="+98...">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">کشور</label>
+                <input type="text" name="country" class="form-control" value="<?= e($form['country']) ?>">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">برچسب (Label)</label>
+                <input type="text" name="label" class="form-control" value="<?= e($form['label']) ?>" placeholder="مثلاً شخصی، کاری">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">وضعیت *</label>
+                <select name="status" class="form-select"><?= optionsHtml(PHONE_STATUSES, $form['status']) ?></select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="form-check">
+                    <input type="checkbox" name="is_primary" id="is_primary" class="form-check-input" value="1" <?= $form['is_primary'] === '1' ? 'checked' : '' ?>>
+                    <label for="is_primary" class="form-check-label">شماره اصلی (Primary)</label>
+                </div>
+            </div>
+            <div class="col-12">
+                <label class="form-label">یادداشت</label>
+                <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>
+            </div>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">ذخیره شماره تلفن</button>
+    <a href="index.php" class="btn btn-outline-secondary">انصراف</a>
+</form>
+<?php require __DIR__ . '/../../includes/footer.php'; ?>

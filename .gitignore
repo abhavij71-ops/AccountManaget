@@ -1,0 +1,18 @@
+# Runtime database and uploads — never publish real user data
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/imports/*.csv
+
+# Keep the imports directory tracked even though its contents are ignored
+!data/imports/.gitkeep
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local scratch files
+*.log
