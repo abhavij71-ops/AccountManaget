@@ -69,6 +69,11 @@ html, body {
     font-weight: 700;
 }
 
+.am-sidebar .am-version {
+    color: #6c7593;
+    font-size: 0.75rem;
+}
+
 .am-topbar {
     background: #fff;
     border-bottom: 1px solid #e3e5eb;

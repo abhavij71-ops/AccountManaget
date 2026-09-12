@@ -89,6 +89,7 @@ require __DIR__ . '/../../includes/header.php';
     <h1 class="h4 mb-0">اکانت‌ها</h1>
     <div class="d-flex gap-2">
         <a href="costs.php" class="btn btn-outline-secondary btn-sm">هزینه‌ها و تمدیدها</a>
+        <a href="bulk-assign.php" class="btn btn-outline-primary btn-sm">+ تخصیص گروهی</a>
         <a href="quick-add.php" class="btn btn-primary btn-sm">+ افزودن سریع</a>
         <a href="add.php" class="btn btn-outline-primary btn-sm">+ فرم کامل</a>
     </div>

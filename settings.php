@@ -64,6 +64,16 @@ require __DIR__ . '/includes/header.php';
 
     <div class="col-lg-6">
         <div class="card am-card mb-3">
+            <div class="card-header bg-white fw-bold">درباره سیستم</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-5">نام سیستم</dt><dd class="col-7"><?= e(APP_NAME) ?></dd>
+                    <dt class="col-5">نسخه</dt><dd class="col-7">v<?= e(APP_VERSION) ?></dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card am-card mb-3">
             <div class="card-header bg-white fw-bold">تغییر رمز عبور</div>
             <div class="card-body">
                 <?php if ($errors): ?>

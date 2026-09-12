@@ -33,9 +33,10 @@ $flash = function_exists('flashGet') ? flashGet() : null;
 <body>
 <div class="d-flex">
     <nav class="am-sidebar d-none d-md-flex flex-column p-3" style="width:250px;">
-        <a href="<?= e(appUrl('index.php')) ?>" class="brand text-decoration-none fs-5 mb-4 d-block">
+        <a href="<?= e(appUrl('index.php')) ?>" class="brand text-decoration-none fs-5 d-block">
             <?= e(APP_NAME) ?>
         </a>
+        <span class="am-version text-decoration-none d-block mb-4">v<?= e(APP_VERSION) ?></span>
         <ul class="nav nav-pills flex-column">
             <?php foreach ($navItems as $item): ?>
                 <?php $isActive = navItemIsActive($relativeScriptPath, $item['prefix']); ?>
