@@ -33,13 +33,17 @@ $sql = 'SELECT * FROM emails';
 if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
 }
-$sql .= ' ORDER BY email_address';
+$sql .= ' ORDER BY is_favorite DESC, email_address';
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $emails = $stmt->fetchAll();
 
 $totalCount = (int) $pdo->query('SELECT COUNT(*) FROM emails')->fetchColumn();
+
+$csrf = csrfToken();
+$queryString = $_SERVER['QUERY_STRING'] ?? '';
+$favoriteRedirect = 'index.php' . ($queryString !== '' ? '?' . $queryString : '');
 
 $pageTitle = 'ایمیل‌ها';
 require __DIR__ . '/../../includes/header.php';
@@ -84,11 +88,18 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 <?php else: ?>
+    <form id="bulk-select-form" method="post" action="bulk-edit.php" class="d-flex justify-content-end mb-2">
+        <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+        <button type="submit" id="bulk-edit-submit" class="btn btn-outline-primary btn-sm">ویرایش سریع انتخاب‌شده‌ها</button>
+    </form>
+
     <div class="card am-card">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
+                        <th style="width:2rem;"><input type="checkbox" class="form-check-input" id="am-select-all" aria-label="انتخاب همه"></th>
+                        <th style="width:2.5rem;"></th>
                         <th>آدرس ایمیل</th>
                         <th>نام نمایشی</th>
                         <th>نوع</th>
@@ -99,7 +110,19 @@ require __DIR__ . '/../../includes/header.php';
                 </thead>
                 <tbody>
                 <?php foreach ($emails as $row): ?>
+                    <?php $isFavorite = (bool) $row['is_favorite']; ?>
                     <tr>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input am-select-checkbox" name="ids[]" value="<?= (int) $row['id'] ?>" form="bulk-select-form" aria-label="انتخاب <?= e($row['email_address']) ?>">
+                        </td>
+                        <td class="text-center">
+                            <form method="post" action="toggle-favorite.php" class="am-favorite-form d-inline">
+                                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                                <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
+                                <input type="hidden" name="redirect" value="<?= e($favoriteRedirect) ?>">
+                                <button type="submit" class="am-favorite-btn<?= $isFavorite ? ' is-favorite' : '' ?>" aria-pressed="<?= $isFavorite ? 'true' : 'false' ?>" title="<?= $isFavorite ? 'حذف از موارد ویژه' : 'افزودن به موارد ویژه' ?>"><?= $isFavorite ? '★' : '☆' ?></button>
+                            </form>
+                        </td>
                         <td><a href="view.php?id=<?= (int) $row['id'] ?>"><?= e($row['email_address']) ?></a></td>
                         <td><?= dashOrValue($row['display_name']) ?></td>
                         <td><?= renderBadge($row['type'], EMAIL_TYPES) ?></td>
@@ -116,5 +139,54 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 <?php endif; ?>
+
+<script>
+document.querySelectorAll('form.am-favorite-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = form.querySelector('button');
+        fetch(form.getAttribute('action'), {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) {
+            if (!res.ok) { throw new Error('bad response'); }
+            return res.json();
+        }).then(function (data) {
+            if (!data.ok) { throw new Error('toggle failed'); }
+            btn.classList.toggle('is-favorite', data.is_favorite);
+            btn.textContent = data.is_favorite ? '★' : '☆';
+            btn.setAttribute('aria-pressed', data.is_favorite ? 'true' : 'false');
+            btn.title = data.is_favorite ? 'حذف از موارد ویژه' : 'افزودن به موارد ویژه';
+        }).catch(function () {
+            form.submit();
+        });
+    });
+});
+
+(function () {
+    var selectAll = document.getElementById('am-select-all');
+    var checkboxes = document.querySelectorAll('.am-select-checkbox');
+    var bulkSubmit = document.getElementById('bulk-edit-submit');
+    if (!checkboxes.length || !bulkSubmit) { return; }
+
+    function updateBulkButton() {
+        var anyChecked = Array.prototype.some.call(checkboxes, function (cb) { return cb.checked; });
+        bulkSubmit.disabled = !anyChecked;
+        if (selectAll) {
+            selectAll.checked = anyChecked && Array.prototype.every.call(checkboxes, function (cb) { return cb.checked; });
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checkboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+            updateBulkButton();
+        });
+    }
+    checkboxes.forEach(function (cb) { cb.addEventListener('change', updateBulkButton); });
+    updateBulkButton();
+})();
+</script>
 
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

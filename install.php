@@ -43,12 +43,14 @@ function installSchemaStatements(): array
             created_date TEXT,
             last_verified TEXT,
             notes TEXT,
+            is_favorite INTEGER NOT NULL DEFAULT 0,
             is_archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
             updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
         )',
         'CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status)',
         'CREATE INDEX IF NOT EXISTS idx_emails_type ON emails(type)',
+        'CREATE INDEX IF NOT EXISTS idx_emails_favorite ON emails(is_favorite)',
 
         'CREATE TABLE IF NOT EXISTS email_security (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

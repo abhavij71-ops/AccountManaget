@@ -59,12 +59,12 @@ function upsertSubscription(PDO $pdo, int $accountId, array $data): void
     if ($id) {
         $sets = implode(', ', array_map(static fn ($c) => "$c = :$c", $columns));
         $stmt = $pdo->prepare("UPDATE subscriptions SET $sets WHERE account_id = :account_id");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     } else {
         $cols = implode(', ', ['account_id', ...$columns]);
         $placeholders = implode(', ', array_map(static fn ($c) => ":$c", ['account_id', ...$columns]));
         $stmt = $pdo->prepare("INSERT INTO subscriptions ($cols) VALUES ($placeholders)");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     }
 }
 
@@ -82,12 +82,12 @@ function upsertPayment(PDO $pdo, int $accountId, array $data): void
     if ($id) {
         $sets = implode(', ', array_map(static fn ($c) => "$c = :$c", $columns));
         $stmt = $pdo->prepare("UPDATE payments SET $sets WHERE account_id = :account_id");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     } else {
         $cols = implode(', ', ['account_id', ...$columns]);
         $placeholders = implode(', ', array_map(static fn ($c) => ":$c", ['account_id', ...$columns]));
         $stmt = $pdo->prepare("INSERT INTO payments ($cols) VALUES ($placeholders)");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     }
 }
 
@@ -106,12 +106,12 @@ function upsertAccountSecurity(PDO $pdo, int $accountId, array $data): void
     if ($id) {
         $sets = implode(', ', array_map(static fn ($c) => "$c = :$c", $columns));
         $stmt = $pdo->prepare("UPDATE account_security SET $sets WHERE account_id = :account_id");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     } else {
         $cols = implode(', ', ['account_id', ...$columns]);
         $placeholders = implode(', ', array_map(static fn ($c) => ":$c", ['account_id', ...$columns]));
         $stmt = $pdo->prepare("INSERT INTO account_security ($cols) VALUES ($placeholders)");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     }
 }
 
@@ -130,12 +130,12 @@ function upsertAccountRecovery(PDO $pdo, int $accountId, array $data): void
     if ($id) {
         $sets = implode(', ', array_map(static fn ($c) => "$c = :$c", $columns));
         $stmt = $pdo->prepare("UPDATE account_recovery SET $sets WHERE account_id = :account_id");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     } else {
         $cols = implode(', ', ['account_id', ...$columns]);
         $placeholders = implode(', ', array_map(static fn ($c) => ":$c", ['account_id', ...$columns]));
         $stmt = $pdo->prepare("INSERT INTO account_recovery ($cols) VALUES ($placeholders)");
-        $stmt->execute([...$data, 'account_id' => $accountId]);
+        $stmt->execute(array_merge($data, ['account_id' => $accountId]));
     }
 }
 

@@ -35,12 +35,31 @@ function upsertEmailSecurity(PDO $pdo, int $emailId, array $data): void
     if ($id) {
         $sets = implode(', ', array_map(static fn ($c) => "$c = :$c", $columns));
         $stmt = $pdo->prepare("UPDATE email_security SET $sets WHERE email_id = :email_id");
-        $stmt->execute([...$data, 'email_id' => $emailId]);
+        $stmt->execute(array_merge($data, ['email_id' => $emailId]));
     } else {
         $cols = implode(', ', ['email_id', ...$columns]);
         $placeholders = implode(', ', array_map(static fn ($c) => ":$c", ['email_id', ...$columns]));
         $stmt = $pdo->prepare("INSERT INTO email_security ($cols) VALUES ($placeholders)");
-        $stmt->execute([...$data, 'email_id' => $emailId]);
+        $stmt->execute(array_merge($data, ['email_id' => $emailId]));
+    }
+}
+
+function applyEmailQuickUpdate(PDO $pdo, int $emailId, array $updates, array $oldEmail): void
+{
+    if (!$updates) {
+        return;
+    }
+
+    $sets = implode(', ', array_map(static fn ($c) => "$c = :$c", array_keys($updates)));
+    $stmt = $pdo->prepare("UPDATE emails SET $sets WHERE id = :id");
+    $stmt->execute(array_merge($updates, ['id' => $emailId]));
+
+    foreach ($updates as $field => $newValue) {
+        $oldValue = (string) ($oldEmail[$field] ?? '');
+        if ($oldValue !== $newValue) {
+            $action = $field === 'status' ? 'Status Changed' : 'Email Updated';
+            log_history($pdo, 'email', $emailId, $action, $field, $oldValue !== '' ? $oldValue : null, $newValue);
+        }
     }
 }
 
