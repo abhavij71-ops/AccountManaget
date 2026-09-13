@@ -92,7 +92,7 @@ require __DIR__ . '/../../includes/header.php';
                                 <span class="badge badge-status-suspended"><?= e(t('import.exact_dup_short')) ?></span>
                             <?php else: ?>
                                 <span class="badge badge-status-pending"><?= e(t('import.possible_dup_short')) ?></span>
-                                <div class="small text-muted"><?= e(t('import.diff_in_prefix')) ?><?= e(implode('، ', $row['dup']['diff_fields'])) ?></div>
+                                <div class="small text-muted"><?= e(t('import.diff_in_prefix')) ?><?= e(implode(t('common.list_separator'), $row['dup']['diff_fields'])) ?></div>
                             <?php endif; ?>
                         </td>
                         <td>

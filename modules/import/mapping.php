@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if ($missingRequired) {
-        $errors[] = t('import.required_fields_prefix') . implode('، ', $missingRequired);
+        $errors[] = t('import.required_fields_prefix') . implode(t('common.list_separator'), $missingRequired);
     }
 
     if (!$errors) {
