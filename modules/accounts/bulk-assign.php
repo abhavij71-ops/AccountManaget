@@ -23,7 +23,7 @@ $form = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     }
 
     $validServiceIds = array_column($services, 'id');
@@ -39,16 +39,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $form['account_type'] = (string) ($_POST['account_type'] ?? 'Not Set');
 
     if (!$form['service_ids']) {
-        $errors[] = 'حداقل یک سرویس انتخاب کنید.';
+        $errors[] = t('accounts.min_one_service');
     }
     if (!$form['email_ids']) {
-        $errors[] = 'حداقل یک ایمیل انتخاب کنید.';
+        $errors[] = t('accounts.min_one_email');
     }
     if (!array_key_exists($form['status'], ACCOUNT_STATUSES)) {
-        $errors[] = 'وضعیت انتخاب‌شده نامعتبر است.';
+        $errors[] = t('emails.invalid_status_selected');
     }
     if (!array_key_exists($form['account_type'], ACCOUNT_TYPES)) {
-        $errors[] = 'نوع اکانت انتخاب‌شده نامعتبر است.';
+        $errors[] = t('accounts.bulk_type_invalid');
     }
 
     if (!$errors) {
@@ -85,9 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            $message = $created . ' اکانت جدید ساخته شد.';
+            $message = t('accounts.bulk_created_message', ['count' => $created]);
             if ($skipped > 0) {
-                $message .= ' ' . $skipped . ' مورد به دلیل وجود قبلی رد شد.';
+                $message .= ' ' . t('accounts.bulk_skipped_message', ['count' => $skipped]);
             }
             flashSet($created > 0 ? 'success' : 'warning', $message);
             header('Location: index.php');
@@ -96,18 +96,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $errors[] = 'خطا در ساخت اکانت‌ها: ' . $e->getMessage();
+            $errors[] = t('accounts.bulk_create_error') . $e->getMessage();
         }
     }
 }
 
 $csrf = csrfToken();
-$pageTitle = 'تخصیص گروهی سرویس به ایمیل‌ها';
+$pageTitle = t('accounts.bulk_assign_title');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 mb-0">تخصیص گروهی سرویس به ایمیل‌ها</h1>
-    <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست</a>
+    <h1 class="h4 mb-0"><?= e(t('accounts.bulk_assign_title')) ?></h1>
+    <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
 </div>
 
 <?php if ($errors): ?>
@@ -120,11 +120,11 @@ require __DIR__ . '/../../includes/header.php';
 
 <?php if (!$services || !$emails): ?>
     <div class="alert alert-warning">
-        برای تخصیص گروهی ابتدا باید حداقل یک سرویس و یک ایمیل ثبت شده باشد.
-        <a href="../services/add.php">افزودن سرویس</a> — <a href="../emails/add.php">افزودن ایمیل</a>
+        <?= e(t('accounts.need_service_and_email_bulk')) ?>
+        <a href="../services/add.php"><?= e(t('services.add_title')) ?></a> — <a href="../emails/add.php"><?= e(t('emails.add_title')) ?></a>
     </div>
 <?php else: ?>
-    <p class="text-muted">یک یا چند سرویس و یک یا چند ایمیل انتخاب کنید. برای هر ترکیب سرویس×ایمیل که هنوز اکانتی برایش ثبت نشده، یک اکانت جدید ساخته می‌شود؛ ترکیب‌هایی که از قبل اکانت دارند رد می‌شوند.</p>
+    <p class="text-muted"><?= e(t('accounts.bulk_assign_intro')) ?></p>
 
     <form method="post" id="bulk-assign-form">
         <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
@@ -133,10 +133,10 @@ require __DIR__ . '/../../includes/header.php';
             <div class="col-md-6">
                 <div class="card am-card mb-3">
                     <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                        <span>سرویس‌ها</span>
+                        <span><?= e(t('services.title')) ?></span>
                         <div class="form-check mb-0">
                             <input type="checkbox" class="form-check-input" id="select-all-services">
-                            <label class="form-check-label small" for="select-all-services">انتخاب همه</label>
+                            <label class="form-check-label small" for="select-all-services"><?= e(t('common.select_all')) ?></label>
                         </div>
                     </div>
                     <div class="card-body" style="max-height:340px; overflow-y:auto;">
@@ -152,10 +152,10 @@ require __DIR__ . '/../../includes/header.php';
             <div class="col-md-6">
                 <div class="card am-card mb-3">
                     <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                        <span>ایمیل‌ها</span>
+                        <span><?= e(t('emails.title')) ?></span>
                         <div class="form-check mb-0">
                             <input type="checkbox" class="form-check-input" id="select-all-emails">
-                            <label class="form-check-label small" for="select-all-emails">انتخاب همه</label>
+                            <label class="form-check-label small" for="select-all-emails"><?= e(t('common.select_all')) ?></label>
                         </div>
                     </div>
                     <div class="card-body" style="max-height:340px; overflow-y:auto;">
@@ -171,27 +171,27 @@ require __DIR__ . '/../../includes/header.php';
         </div>
 
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">مقادیر پیش‌فرض اکانت‌های جدید</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('accounts.bulk_defaults_title')) ?></div>
             <div class="card-body row g-3">
                 <div class="col-md-4">
-                    <label class="form-label">وضعیت</label>
+                    <label class="form-label"><?= e(t('common.field_status')) ?></label>
                     <select name="status" class="form-select"><?= optionsHtml(ACCOUNT_STATUSES, $form['status']) ?></select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">نوع اکانت</label>
+                    <label class="form-label"><?= e(t('accounts.field_type_plain')) ?></label>
                     <select name="account_type" class="form-select"><?= optionsHtml(ACCOUNT_TYPES, $form['account_type']) ?></select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">نام کاربری مشترک (اختیاری)</label>
+                    <label class="form-label"><?= e(t('accounts.field_shared_username')) ?></label>
                     <input type="text" name="username" class="form-control" value="<?= e($form['username']) ?>">
-                    <div class="form-text">در صورت پر بودن، روی همهٔ اکانت‌های جدید اعمال می‌شود.</div>
+                    <div class="form-text"><?= e(t('accounts.shared_username_hint')) ?></div>
                 </div>
             </div>
         </div>
 
         <div class="d-flex align-items-center gap-3">
-            <button type="submit" class="btn btn-primary">ساخت اکانت‌ها</button>
-            <a href="index.php" class="btn btn-outline-secondary">انصراف</a>
+            <button type="submit" class="btn btn-primary"><?= e(t('accounts.create_accounts_button')) ?></button>
+            <a href="index.php" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
             <span id="bulk-assign-count" class="text-muted small"></span>
         </div>
     </form>
@@ -203,6 +203,7 @@ require __DIR__ . '/../../includes/header.php';
         var selectAllServices = document.getElementById('select-all-services');
         var selectAllEmails = document.getElementById('select-all-emails');
         var counter = document.getElementById('bulk-assign-count');
+        var COUNTER_TEMPLATE = <?= json_encode(t('accounts.bulk_assign_counter'), JSON_UNESCAPED_UNICODE) ?>;
 
         function countChecked(list) {
             return Array.prototype.filter.call(list, function (cb) { return cb.checked; }).length;
@@ -211,7 +212,7 @@ require __DIR__ . '/../../includes/header.php';
         function updateCounter() {
             var s = countChecked(serviceBoxes);
             var e = countChecked(emailBoxes);
-            counter.textContent = (s && e) ? ('حداکثر ' + (s * e) + ' اکانت ساخته می‌شود (' + s + ' سرویس × ' + e + ' ایمیل)') : '';
+            counter.textContent = (s && e) ? COUNTER_TEMPLATE.replace('{count}', s * e).replace('{s}', s).replace('{e}', e) : '';
         }
 
         function wireSelectAll(selectAll, boxes) {

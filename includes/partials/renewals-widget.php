@@ -42,14 +42,14 @@ if (!function_exists('renewalRowLabel')) {
             </div>
             <div class="card-body">
                 <?php if (!$renewalsData['overdue']): ?>
-                    <p class="text-muted small mb-0">هیچ تمدید عقب‌افتاده‌ای وجود ندارد.</p>
+                    <p class="text-muted small mb-0"><?= e(t('widget.no_overdue')) ?></p>
                 <?php else: ?>
                     <ul class="list-unstyled mb-0">
                         <?php foreach ($renewalsData['overdue'] as $row): ?>
                             <li class="mb-2 pb-2 border-bottom">
                                 <a href="<?= e(appUrl('modules/accounts/view.php?id=' . $row['account_id'])) ?>"><?= e(renewalRowLabel($row)) ?></a>
                                 <div class="small text-muted">
-                                    تاریخ تمدید: <?= e($row['renewal_date']) ?>
+                                    <?= e(t('widget.renewal_date_prefix')) ?><?= e($row['renewal_date']) ?>
                                     <?= renewalRowCost($row) !== '' ? ' — ' . renewalRowCost($row) : '' ?>
                                 </div>
                             </li>
@@ -63,19 +63,19 @@ if (!function_exists('renewalRowLabel')) {
     <div class="col-lg-4">
         <div class="card am-card h-100">
             <div class="card-header bg-white fw-bold d-flex justify-content-between">
-                <span>نزدیک به Renewal (<?= (int) $renewalsData['upcoming_days'] ?> روز آینده)</span>
+                <span><?= e(t('widget.upcoming_title', ['days' => (int) $renewalsData['upcoming_days']])) ?></span>
                 <span class="badge badge-status-pending"><?= count($renewalsData['upcoming']) ?></span>
             </div>
             <div class="card-body">
                 <?php if (!$renewalsData['upcoming']): ?>
-                    <p class="text-muted small mb-0">تمدید نزدیکی وجود ندارد.</p>
+                    <p class="text-muted small mb-0"><?= e(t('widget.no_upcoming')) ?></p>
                 <?php else: ?>
                     <ul class="list-unstyled mb-0">
                         <?php foreach ($renewalsData['upcoming'] as $row): ?>
                             <li class="mb-2 pb-2 border-bottom">
                                 <a href="<?= e(appUrl('modules/accounts/view.php?id=' . $row['account_id'])) ?>"><?= e(renewalRowLabel($row)) ?></a>
                                 <div class="small text-muted">
-                                    تاریخ تمدید: <?= e($row['renewal_date']) ?>
+                                    <?= e(t('widget.renewal_date_prefix')) ?><?= e($row['renewal_date']) ?>
                                     <?= renewalRowCost($row) !== '' ? ' — ' . renewalRowCost($row) : '' ?>
                                 </div>
                             </li>
@@ -89,19 +89,19 @@ if (!function_exists('renewalRowLabel')) {
     <div class="col-lg-4">
         <div class="card am-card h-100">
             <div class="card-header bg-white fw-bold d-flex justify-content-between">
-                <span>تمدید خودکار (Auto Renew)</span>
+                <span><?= e(t('widget.auto_renew_title')) ?></span>
                 <span class="badge badge-enabled"><?= count($renewalsData['auto_renewing']) ?></span>
             </div>
             <div class="card-body">
                 <?php if (!$renewalsData['auto_renewing']): ?>
-                    <p class="text-muted small mb-0">هیچ Subscription با تمدید خودکار ثبت نشده است.</p>
+                    <p class="text-muted small mb-0"><?= e(t('widget.no_auto_renewing')) ?></p>
                 <?php else: ?>
                     <ul class="list-unstyled mb-0">
                         <?php foreach ($renewalsData['auto_renewing'] as $row): ?>
                             <li class="mb-2 pb-2 border-bottom">
                                 <a href="<?= e(appUrl('modules/accounts/view.php?id=' . $row['account_id'])) ?>"><?= e(renewalRowLabel($row)) ?></a>
                                 <div class="small text-muted">
-                                    <?= $row['renewal_date'] ? 'تاریخ تمدید: ' . e($row['renewal_date']) : dashOrValue(null) ?>
+                                    <?= $row['renewal_date'] ? e(t('widget.renewal_date_prefix')) . e($row['renewal_date']) : dashOrValue(null) ?>
                                     <?= renewalRowCost($row) !== '' ? ' — ' . renewalRowCost($row) : '' ?>
                                 </div>
                             </li>

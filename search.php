@@ -60,33 +60,33 @@ if ($q !== '') {
     $totalCount = count($emailResults) + count($serviceResults) + count($accountResults) + count($phoneResults);
 }
 
-$pageTitle = 'جستجو';
+$pageTitle = t('nav.search');
 require __DIR__ . '/includes/header.php';
 ?>
-<h1 class="h4 mb-4">جستجوی سراسری</h1>
+<h1 class="h4 mb-4"><?= e(t('dashboard.global_search')) ?></h1>
 
 <form method="get" class="mb-4">
     <div class="input-group">
         <input type="text" name="q" class="form-control form-control-lg" value="<?= e($q) ?>"
-               placeholder="جستجو در ایمیل، نام کاربری، سرویس، تلفن، برچسب‌ها، یادداشت‌ها، فیلدهای سفارشی، مرجع پرداخت..." autofocus>
-        <button type="submit" class="btn btn-primary">جستجو</button>
+               placeholder="<?= e(t('search.placeholder')) ?>" autofocus>
+        <button type="submit" class="btn btn-primary"><?= e(t('search.search_button')) ?></button>
     </div>
 </form>
 
 <?php if ($q === ''): ?>
-    <p class="text-muted">عبارت مورد نظر را وارد کنید.</p>
+    <p class="text-muted"><?= e(t('search.enter_query')) ?></p>
 <?php elseif ($totalCount === 0): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-0">هیچ نتیجه‌ای برای «<?= e($q) ?>» یافت نشد.</p>
+            <p class="text-muted mb-0"><?= e(t('search.no_results', ['q' => $q])) ?></p>
         </div>
     </div>
 <?php else: ?>
-    <p class="text-muted"><?= (int) $totalCount ?> نتیجه برای «<?= e($q) ?>»</p>
+    <p class="text-muted"><?= e(t('search.results_count', ['count' => (int) $totalCount, 'q' => $q])) ?></p>
 
     <?php if ($emailResults): ?>
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">ایمیل‌ها (<?= count($emailResults) ?>)</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('emails.title')) ?> (<?= count($emailResults) ?>)</div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($emailResults as $row): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -103,7 +103,7 @@ require __DIR__ . '/includes/header.php';
 
     <?php if ($serviceResults): ?>
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">سرویس‌ها (<?= count($serviceResults) ?>)</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('services.title')) ?> (<?= count($serviceResults) ?>)</div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($serviceResults as $row): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -120,7 +120,7 @@ require __DIR__ . '/includes/header.php';
 
     <?php if ($accountResults): ?>
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">اکانت‌ها (<?= count($accountResults) ?>)</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('accounts.title')) ?> (<?= count($accountResults) ?>)</div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($accountResults as $row): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -140,7 +140,7 @@ require __DIR__ . '/includes/header.php';
 
     <?php if ($phoneResults): ?>
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">شماره تلفن‌ها (<?= count($phoneResults) ?>)</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('phones.title')) ?> (<?= count($phoneResults) ?>)</div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($phoneResults as $row): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">

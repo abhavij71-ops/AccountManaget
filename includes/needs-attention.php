@@ -21,9 +21,16 @@ function needsAttentionLevelBadgeClass(string $level): string
     };
 }
 
+function needsAttentionLevelLabel(string $level): string
+{
+    $key = 'na.level_' . strtolower($level);
+    $translated = t($key);
+    return $translated !== $key ? $translated : (NEEDS_ATTENTION_LEVEL_LABELS[$level] ?? $level);
+}
+
 function renderNeedsAttentionLevelBadge(string $level): string
 {
-    return '<span class="badge ' . needsAttentionLevelBadgeClass($level) . '">' . e(NEEDS_ATTENTION_LEVEL_LABELS[$level] ?? $level) . '</span>';
+    return '<span class="badge ' . needsAttentionLevelBadgeClass($level) . '">' . e(needsAttentionLevelLabel($level)) . '</span>';
 }
 
 /**
@@ -43,24 +50,24 @@ function evaluateAccountIssues(array $account, ?array $security, ?array $recover
 
     $twofa = $security['twofa_status'] ?? 'Not Set';
     if ($twofa === 'Disabled') {
-        $issues[] = ['level' => 'Critical', 'message' => 'تأیید دومرحله‌ای (2FA) غیرفعال است.'];
+        $issues[] = ['level' => 'Critical', 'message' => t('na.account_2fa_disabled')];
     } elseif ($twofa === 'Unknown') {
-        $issues[] = ['level' => 'Critical', 'message' => 'وضعیت تأیید دومرحله‌ای (2FA) نامشخص است.'];
+        $issues[] = ['level' => 'Critical', 'message' => t('na.account_2fa_unknown')];
     }
 
     $recoveryStatus = $recovery['status'] ?? 'Not Set';
     if ($recoveryStatus === 'Not Set') {
-        $issues[] = ['level' => 'Critical', 'message' => 'اطلاعات بازیابی (Recovery) برای این اکانت ثبت نشده است.'];
+        $issues[] = ['level' => 'Critical', 'message' => t('na.account_recovery_missing')];
     } elseif ($recoveryStatus === 'Not Verified') {
-        $issues[] = ['level' => 'Warning', 'message' => 'اطلاعات بازیابی (Recovery) هنوز تأیید نشده است.'];
+        $issues[] = ['level' => 'Warning', 'message' => t('na.account_recovery_unverified')];
     }
 
     if (empty($account['last_verified'])) {
-        $issues[] = ['level' => 'Warning', 'message' => 'این اکانت هرگز تأیید نشده است.'];
+        $issues[] = ['level' => 'Warning', 'message' => t('na.account_never_verified')];
     } else {
         $verifiedAt = strtotime((string) $account['last_verified']);
         if ($verifiedAt !== false && $verifiedAt < strtotime('-180 days')) {
-            $issues[] = ['level' => 'Warning', 'message' => 'آخرین تأیید این اکانت بیش از ۶ ماه پیش بوده است.'];
+            $issues[] = ['level' => 'Warning', 'message' => t('na.account_stale_verification')];
         }
     }
 
@@ -68,19 +75,19 @@ function evaluateAccountIssues(array $account, ?array $security, ?array $recover
         $renewalAt = strtotime((string) $subscription['renewal_date']);
         if ($renewalAt !== false) {
             if ($renewalAt < strtotime('today')) {
-                $issues[] = ['level' => 'Warning', 'message' => 'تاریخ تمدید Subscription گذشته است (Overdue).'];
+                $issues[] = ['level' => 'Warning', 'message' => t('na.subscription_overdue')];
             } elseif ($renewalAt <= strtotime('+30 days')) {
-                $issues[] = ['level' => 'Warning', 'message' => 'تاریخ تمدید Subscription نزدیک است.'];
+                $issues[] = ['level' => 'Warning', 'message' => t('na.subscription_upcoming')];
             }
         }
     }
     if ($subscription && in_array($subscription['status'] ?? null, ['Expired', 'Paused'], true)) {
-        $label = SUBSCRIPTION_STATUSES[$subscription['status']] ?? $subscription['status'];
-        $issues[] = ['level' => 'Warning', 'message' => 'وضعیت Subscription این اکانت مشکل دارد (' . $label . ').'];
+        $label = enumLabel($subscription['status'], SUBSCRIPTION_STATUSES);
+        $issues[] = ['level' => 'Warning', 'message' => t('na.subscription_problem', ['label' => $label])];
     }
 
     if ($completeness < 50) {
-        $issues[] = ['level' => 'Informational', 'message' => 'اطلاعات این اکانت ناقص است (' . $completeness . '% تکمیل).'];
+        $issues[] = ['level' => 'Informational', 'message' => t('na.account_incomplete', ['pct' => $completeness])];
     }
 
     $secondaryUnknown = false;
@@ -94,13 +101,13 @@ function evaluateAccountIssues(array $account, ?array $security, ?array $recover
         $secondaryUnknown = true;
     }
     if ($secondaryUnknown) {
-        $issues[] = ['level' => 'Informational', 'message' => 'برخی از وضعیت‌های امنیتی این اکانت نامشخص (Unknown) است.'];
+        $issues[] = ['level' => 'Informational', 'message' => t('na.account_secondary_unknown')];
     }
 
     $checkedAt = $security['last_security_check'] ?? null;
     $checkedAtTs = $checkedAt ? strtotime((string) $checkedAt) : false;
     if (!$checkedAt || $checkedAtTs === false || $checkedAtTs < strtotime('-180 days')) {
-        $issues[] = ['level' => 'Informational', 'message' => 'مدتی است بررسی امنیتی برای این اکانت انجام نشده است.'];
+        $issues[] = ['level' => 'Informational', 'message' => t('na.account_security_review_due')];
     }
 
     return $issues;
@@ -112,32 +119,32 @@ function evaluateEmailIssues(array $email, ?array $security, int $completeness):
 
     $twofa = $security['twofa_status'] ?? 'Not Set';
     if ($twofa === 'Disabled') {
-        $issues[] = ['level' => 'Critical', 'message' => 'تأیید دومرحله‌ای (2FA) این ایمیل غیرفعال است.'];
+        $issues[] = ['level' => 'Critical', 'message' => t('na.email_2fa_disabled')];
     } elseif ($twofa === 'Unknown') {
-        $issues[] = ['level' => 'Critical', 'message' => 'وضعیت تأیید دومرحله‌ای (2FA) این ایمیل نامشخص است.'];
+        $issues[] = ['level' => 'Critical', 'message' => t('na.email_2fa_unknown')];
     }
 
     $recoveryCodes = $security['recovery_codes_status'] ?? 'Not Set';
     if ($recoveryCodes === 'Not Set' && empty($security['recovery_email_id']) && empty($security['recovery_phone_id'])) {
-        $issues[] = ['level' => 'Critical', 'message' => 'اطلاعات بازیابی برای این ایمیل ثبت نشده است.'];
+        $issues[] = ['level' => 'Critical', 'message' => t('na.email_recovery_missing')];
     }
 
     if (empty($email['last_verified'])) {
-        $issues[] = ['level' => 'Warning', 'message' => 'این ایمیل هرگز تأیید نشده است.'];
+        $issues[] = ['level' => 'Warning', 'message' => t('na.email_never_verified')];
     } else {
         $verifiedAt = strtotime((string) $email['last_verified']);
         if ($verifiedAt !== false && $verifiedAt < strtotime('-180 days')) {
-            $issues[] = ['level' => 'Warning', 'message' => 'آخرین تأیید این ایمیل بیش از ۶ ماه پیش بوده است.'];
+            $issues[] = ['level' => 'Warning', 'message' => t('na.email_stale_verification')];
         }
     }
 
     if ($completeness < 50) {
-        $issues[] = ['level' => 'Informational', 'message' => 'پروفایل این ایمیل ناقص است (' . $completeness . '% تکمیل).'];
+        $issues[] = ['level' => 'Informational', 'message' => t('na.email_incomplete', ['pct' => $completeness])];
     }
 
     foreach (['passkey_status', 'security_key_status', 'security_questions_status'] as $f) {
         if (($security[$f] ?? 'Not Set') === 'Unknown') {
-            $issues[] = ['level' => 'Informational', 'message' => 'برخی از وضعیت‌های امنیتی این ایمیل نامشخص (Unknown) است.'];
+            $issues[] = ['level' => 'Informational', 'message' => t('na.email_secondary_unknown')];
             break;
         }
     }

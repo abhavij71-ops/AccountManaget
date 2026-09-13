@@ -16,17 +16,17 @@ if ($levelFilter !== '' && in_array($levelFilter, NEEDS_ATTENTION_LEVELS, true))
     $items = array_values(array_filter($items, static fn ($i) => $i['level'] === $levelFilter));
 }
 
-$pageTitle = 'نیازمند بررسی';
+$pageTitle = t('nav.needs_attention');
 require __DIR__ . '/includes/header.php';
 ?>
-<h1 class="h4 mb-4">نیازمند بررسی (Needs Attention)</h1>
+<h1 class="h4 mb-4"><?= e(t('na.page_title')) ?></h1>
 
 <div class="row g-3 mb-4">
     <div class="col-4">
         <a href="?level=Critical" class="text-decoration-none">
             <div class="card am-card text-center h-100 <?= $levelFilter === 'Critical' ? 'border-danger' : '' ?>">
                 <div class="card-body">
-                    <div class="text-muted small mb-1">بحرانی (Critical)</div>
+                    <div class="text-muted small mb-1"><?= e(t('na.critical_card')) ?></div>
                     <div class="h3 mb-0 text-danger"><?= (int) $summary['Critical'] ?></div>
                 </div>
             </div>
@@ -36,7 +36,7 @@ require __DIR__ . '/includes/header.php';
         <a href="?level=Warning" class="text-decoration-none">
             <div class="card am-card text-center h-100 <?= $levelFilter === 'Warning' ? 'border-warning' : '' ?>">
                 <div class="card-body">
-                    <div class="text-muted small mb-1">هشدار (Warning)</div>
+                    <div class="text-muted small mb-1"><?= e(t('na.warning_card')) ?></div>
                     <div class="h3 mb-0 text-warning"><?= (int) $summary['Warning'] ?></div>
                 </div>
             </div>
@@ -46,7 +46,7 @@ require __DIR__ . '/includes/header.php';
         <a href="?level=Informational" class="text-decoration-none">
             <div class="card am-card text-center h-100 <?= $levelFilter === 'Informational' ? 'border-info' : '' ?>">
                 <div class="card-body">
-                    <div class="text-muted small mb-1">اطلاع‌رسانی</div>
+                    <div class="text-muted small mb-1"><?= e(t('na.level_informational')) ?></div>
                     <div class="h3 mb-0 text-info"><?= (int) $summary['Informational'] ?></div>
                 </div>
             </div>
@@ -55,13 +55,13 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php if ($levelFilter !== ''): ?>
-    <a href="needs-attention.php" class="btn btn-sm btn-outline-secondary mb-3">حذف فیلتر</a>
+    <a href="needs-attention.php" class="btn btn-sm btn-outline-secondary mb-3"><?= e(t('na.clear_filter')) ?></a>
 <?php endif; ?>
 
 <?php if (!$items): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-0">هیچ موردی نیازمند بررسی نیست.</p>
+            <p class="text-muted mb-0"><?= e(t('na.no_items')) ?></p>
         </div>
     </div>
 <?php else: ?>

@@ -10,7 +10,7 @@ requireLogin();
 $pdo = db();
 $importState = $_SESSION['import'] ?? null;
 if (!$importState || empty($importState['mapping']) || !is_file($importState['file_path'])) {
-    flashSet('danger', 'ابتدا فایل و تطبیق ستون‌ها را مشخص کنید.');
+    flashSet('danger', t('import.select_mapping_first'));
     header('Location: index.php');
     exit;
 }
@@ -41,22 +41,22 @@ $fields = importEntityFields($entity);
 $previewFieldKeys = array_slice(array_column($fields, 'key'), 0, 4);
 
 $csrf = csrfToken();
-$pageTitle = 'Import — پیش‌نمایش';
+$pageTitle = t('import.preview_title');
 require __DIR__ . '/../../includes/header.php';
 ?>
-<h1 class="h4 mb-1">پیش‌نمایش و تشخیص موارد تکراری</h1>
-<p class="text-muted">نوع: <?= e(IMPORT_ENTITY_LABELS[$entity]) ?> — فایل: <?= e($importState['original_filename']) ?></p>
+<h1 class="h4 mb-1"><?= e(t('import.preview_heading')) ?></h1>
+<p class="text-muted"><?= e(t('import.type_label')) ?> <?= e(importEntityLabel($entity)) ?> — <?= e(t('import.file_label')) ?> <?= e($importState['original_filename']) ?></p>
 
 <div class="d-flex gap-2 flex-wrap mb-3">
-    <span class="badge badge-category">جدید: <?= (int) $summary['New'] ?></span>
-    <span class="badge badge-status-suspended">تکراری دقیق (Exact): <?= (int) $summary['Exact Duplicate'] ?></span>
-    <span class="badge badge-status-pending">احتمالاً تکراری (Possible): <?= (int) $summary['Possible Duplicate'] ?></span>
-    <span class="badge badge-disabled">خطای اعتبارسنجی: <?= (int) $summary['Error'] ?></span>
+    <span class="badge badge-category"><?= e(t('import.new_label')) ?>: <?= (int) $summary['New'] ?></span>
+    <span class="badge badge-status-suspended"><?= e(t('import.exact_dup_label')) ?>: <?= (int) $summary['Exact Duplicate'] ?></span>
+    <span class="badge badge-status-pending"><?= e(t('import.possible_dup_label')) ?>: <?= (int) $summary['Possible Duplicate'] ?></span>
+    <span class="badge badge-disabled"><?= e(t('import.validation_error_label')) ?>: <?= (int) $summary['Error'] ?></span>
 </div>
 
 <?php if ($summary['Error'] > 0): ?>
     <div class="alert alert-warning">
-        ردیف‌های دارای خطای اعتبارسنجی به‌طور خودکار نادیده گرفته می‌شوند و Import نمی‌شوند؛ بقیه ردیف‌ها همچنان قابل Import هستند.
+        <?= e(t('import.error_rows_note')) ?>
     </div>
 <?php endif; ?>
 
@@ -71,8 +71,8 @@ require __DIR__ . '/../../includes/header.php';
                         <?php foreach ($previewFieldKeys as $k): ?>
                             <th><?= e($fields[array_search($k, array_column($fields, 'key'), true)]['label']) ?></th>
                         <?php endforeach; ?>
-                        <th>وضعیت</th>
-                        <th>اقدام</th>
+                        <th><?= e(t('common.field_status')) ?></th>
+                        <th><?= e(t('import.th_action')) ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -84,31 +84,31 @@ require __DIR__ . '/../../includes/header.php';
                         <?php endforeach; ?>
                         <td>
                             <?php if ($row['errors']): ?>
-                                <span class="badge badge-disabled" title="<?= e(implode(' | ', $row['errors'])) ?>">خطا</span>
+                                <span class="badge badge-disabled" title="<?= e(implode(' | ', $row['errors'])) ?>"><?= e(t('import.error_badge')) ?></span>
                                 <div class="small text-danger"><?= e($row['errors'][0]) ?></div>
                             <?php elseif ($row['dup']['status'] === 'New'): ?>
-                                <span class="badge badge-category">جدید</span>
+                                <span class="badge badge-category"><?= e(t('import.new_label')) ?></span>
                             <?php elseif ($row['dup']['status'] === 'Exact Duplicate'): ?>
-                                <span class="badge badge-status-suspended">تکراری دقیق</span>
+                                <span class="badge badge-status-suspended"><?= e(t('import.exact_dup_short')) ?></span>
                             <?php else: ?>
-                                <span class="badge badge-status-pending">احتمالاً تکراری</span>
-                                <div class="small text-muted">تفاوت در: <?= e(implode('، ', $row['dup']['diff_fields'])) ?></div>
+                                <span class="badge badge-status-pending"><?= e(t('import.possible_dup_short')) ?></span>
+                                <div class="small text-muted"><?= e(t('import.diff_in_prefix')) ?><?= e(implode('، ', $row['dup']['diff_fields'])) ?></div>
                             <?php endif; ?>
                         </td>
                         <td>
                             <?php if ($row['errors']): ?>
                                 <input type="hidden" name="action_<?= (int) $row['index'] ?>" value="skip">
-                                <span class="text-muted small">نادیده گرفته می‌شود</span>
+                                <span class="text-muted small"><?= e(t('import.skipped_auto')) ?></span>
                             <?php elseif ($row['dup']['status'] === 'New'): ?>
                                 <select name="action_<?= (int) $row['index'] ?>" class="form-select form-select-sm">
-                                    <option value="create" selected>ایجاد</option>
-                                    <option value="skip">رد کردن</option>
+                                    <option value="create" selected><?= e(t('import.action_create')) ?></option>
+                                    <option value="skip"><?= e(t('import.action_skip')) ?></option>
                                 </select>
                             <?php else: ?>
                                 <select name="action_<?= (int) $row['index'] ?>" class="form-select form-select-sm">
-                                    <option value="skip" selected>رد کردن (Skip)</option>
-                                    <option value="update">به‌روزرسانی موجود (Update Existing)</option>
-                                    <option value="create">ایجاد رکورد جدید (Create New)</option>
+                                    <option value="skip" selected><?= e(t('import.action_skip_full')) ?></option>
+                                    <option value="update"><?= e(t('import.action_update_full')) ?></option>
+                                    <option value="create"><?= e(t('import.action_create_full')) ?></option>
                                 </select>
                             <?php endif; ?>
                         </td>
@@ -119,8 +119,8 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 
-    <p class="text-muted small">هیچ رکورد موجودی بدون انتخاب صریح «به‌روزرسانی موجود» توسط شما تغییر نخواهد کرد.</p>
-    <button type="submit" class="btn btn-primary">تأیید و Import</button>
-    <a href="index.php" class="btn btn-outline-secondary">انصراف</a>
+    <p class="text-muted small"><?= e(t('import.no_overwrite_note')) ?></p>
+    <button type="submit" class="btn btn-primary"><?= e(t('import.confirm_button')) ?></button>
+    <a href="index.php" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
 </form>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

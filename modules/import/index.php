@@ -12,20 +12,20 @@ $entity = (string) ($_POST['entity'] ?? 'account');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     }
 
     if (!array_key_exists($entity, IMPORT_ENTITY_LABELS)) {
-        $errors[] = 'نوع اطلاعات نامعتبر است.';
+        $errors[] = t('import.invalid_entity_type');
     }
 
     $file = $_FILES['csv_file'] ?? null;
     if (!$file || $file['error'] === UPLOAD_ERR_NO_FILE) {
-        $errors[] = 'یک فایل CSV انتخاب کنید.';
+        $errors[] = t('import.no_file_selected');
     } elseif ($file['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = 'خطا در آپلود فایل.';
+        $errors[] = t('import.upload_error');
     } elseif (strtolower((string) pathinfo($file['name'], PATHINFO_EXTENSION)) !== 'csv') {
-        $errors[] = 'فقط فایل با پسوند csv. پذیرفته می‌شود.';
+        $errors[] = t('import.only_csv_accepted');
     }
 
     if (!$errors) {
@@ -37,17 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $destination = $importDir . '/' . $token . '.csv';
 
         if (!move_uploaded_file($file['tmp_name'], $destination)) {
-            $errors[] = 'ذخیره فایل ممکن نشد.';
+            $errors[] = t('import.save_failed');
         } else {
             $parsed = parseCsvFile($destination);
             if ($parsed['error'] !== null) {
                 $errors[] = $parsed['error'];
                 unlink($destination);
             } elseif (!$parsed['headers']) {
-                $errors[] = 'ستون‌های فایل قابل تشخیص نبود.';
+                $errors[] = t('import.columns_undetected');
                 unlink($destination);
             } elseif (!$parsed['rows']) {
-                $errors[] = 'فایل هیچ ردیف داده‌ای ندارد.';
+                $errors[] = t('import.no_data_rows');
                 unlink($destination);
             } else {
                 $_SESSION['import'] = [
@@ -65,10 +65,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = csrfToken();
-$pageTitle = 'Import — انتخاب فایل';
+$pageTitle = t('import.select_file_title');
 require __DIR__ . '/../../includes/header.php';
 ?>
-<h1 class="h4 mb-4">Import از فایل CSV</h1>
+<h1 class="h4 mb-4"><?= e(t('import.from_csv_heading')) ?></h1>
 
 <?php if ($errors): ?>
     <div class="alert alert-danger">
@@ -81,26 +81,25 @@ require __DIR__ . '/../../includes/header.php';
 <div class="card am-card">
     <div class="card-body">
         <p class="text-muted small">
-            مراحل: انتخاب فایل &larr; تشخیص ستون‌ها &larr; تطبیق ستون‌ها &larr; پیش‌نمایش و اعتبارسنجی &larr;
-            تشخیص موارد تکراری &larr; تأیید &larr; Import. هیچ رکورد موجودی بدون تأیید صریح شما بازنویسی نمی‌شود.
+            <?= e(t('import.steps_note')) ?>
         </p>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <div class="mb-3">
-                <label class="form-label">نوع اطلاعات *</label>
+                <label class="form-label"><?= e(t('import.field_entity_type_required')) ?></label>
                 <select name="entity" class="form-select">
                     <?php foreach (IMPORT_ENTITY_LABELS as $key => $label): ?>
-                        <option value="<?= e($key) ?>" <?= $entity === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                        <option value="<?= e($key) ?>" <?= $entity === $key ? 'selected' : '' ?>><?= e(importEntityLabel($key)) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <div class="form-text">برای Import اکانت‌ها، سرویس و ایمیل مربوطه باید از قبل در سیستم ثبت شده باشند.</div>
+                <div class="form-text"><?= e(t('import.accounts_need_service_email')) ?></div>
             </div>
             <div class="mb-3">
-                <label class="form-label">فایل CSV *</label>
+                <label class="form-label"><?= e(t('import.field_csv_file_required')) ?></label>
                 <input type="file" name="csv_file" class="form-control" accept=".csv" required>
-                <div class="form-text">ردیف اول فایل باید عنوان ستون‌ها باشد. حداکثر ۲۰۰۰ ردیف.</div>
+                <div class="form-text"><?= e(t('import.csv_file_hint')) ?></div>
             </div>
-            <button type="submit" class="btn btn-primary">ادامه</button>
+            <button type="submit" class="btn btn-primary"><?= e(t('import.continue_button')) ?></button>
         </form>
     </div>
 </div>

@@ -9,7 +9,7 @@ requireLogin();
 
 $importState = $_SESSION['import'] ?? null;
 if (!$importState || !is_file($importState['file_path'])) {
-    flashSet('danger', 'ابتدا یک فایل برای Import انتخاب کنید.');
+    flashSet('danger', t('import.select_file_first'));
     header('Location: index.php');
     exit;
 }
@@ -23,7 +23,7 @@ $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     }
 
     $mapping = [];
@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if ($missingRequired) {
-        $errors[] = 'این فیلدهای الزامی باید به یک ستون نگاشت شوند: ' . implode('، ', $missingRequired);
+        $errors[] = t('import.required_fields_prefix') . implode('، ', $missingRequired);
     }
 
     if (!$errors) {
@@ -52,11 +52,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $guessedMapping = guessColumnMapping($headers, $fields);
 
 $csrf = csrfToken();
-$pageTitle = 'Import — تطبیق ستون‌ها';
+$pageTitle = t('import.mapping_title');
 require __DIR__ . '/../../includes/header.php';
 ?>
-<h1 class="h4 mb-1">تطبیق ستون‌ها</h1>
-<p class="text-muted">نوع: <?= e(IMPORT_ENTITY_LABELS[$entity]) ?> — فایل: <?= e($importState['original_filename']) ?> — <?= (int) $importState['row_count'] ?> ردیف</p>
+<h1 class="h4 mb-1"><?= e(t('import.map_columns_heading')) ?></h1>
+<p class="text-muted"><?= e(t('import.type_label')) ?> <?= e(importEntityLabel($entity)) ?> — <?= e(t('import.file_label')) ?> <?= e($importState['original_filename']) ?> — <?= (int) $importState['row_count'] ?> <?= e(t('import.rows_suffix')) ?></p>
 
 <?php if ($errors): ?>
     <div class="alert alert-danger">
@@ -68,19 +68,19 @@ require __DIR__ . '/../../includes/header.php';
 
 <div class="card am-card">
     <div class="card-body">
-        <p class="text-muted small">برای هر فیلد، ستون متناظر در فایل CSV را انتخاب کنید. فیلدهای بدون ستون نگاشته‌نشده، خالی در نظر گرفته می‌شوند.</p>
+        <p class="text-muted small"><?= e(t('import.map_instructions')) ?></p>
         <form method="post">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <div class="table-responsive">
                 <table class="table table-sm align-middle">
-                    <thead><tr><th>فیلد</th><th>ستون در فایل CSV</th></tr></thead>
+                    <thead><tr><th><?= e(t('import.th_field')) ?></th><th><?= e(t('import.th_csv_column')) ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($fields as $field): ?>
                         <tr>
                             <td class="text-nowrap"><?= e($field['label']) ?><?= $field['required'] ? ' *' : '' ?></td>
                             <td>
                                 <select name="map_<?= e($field['key']) ?>" class="form-select form-select-sm">
-                                    <option value="">— نادیده گرفتن —</option>
+                                    <option value=""><?= e(t('import.ignore_option')) ?></option>
                                     <?php foreach ($headers as $h): ?>
                                         <option value="<?= e($h) ?>" <?= $guessedMapping[$field['key']] === $h ? 'selected' : '' ?>><?= e($h) ?></option>
                                     <?php endforeach; ?>
@@ -91,8 +91,8 @@ require __DIR__ . '/../../includes/header.php';
                     </tbody>
                 </table>
             </div>
-            <button type="submit" class="btn btn-primary">ادامه به پیش‌نمایش</button>
-            <a href="index.php" class="btn btn-outline-secondary">انصراف</a>
+            <button type="submit" class="btn btn-primary"><?= e(t('import.continue_to_preview')) ?></button>
+            <a href="index.php" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
         </form>
     </div>
 </div>

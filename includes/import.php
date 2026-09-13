@@ -61,6 +61,12 @@ const IMPORT_ENTITY_LABELS = [
     'account' => 'اکانت‌ها',
 ];
 
+function importEntityLabel(string $entity): string
+{
+    $keys = ['email' => 'emails.title', 'service' => 'services.title', 'phone' => 'phones.title', 'account' => 'accounts.title'];
+    return isset($keys[$entity]) ? t($keys[$entity]) : (IMPORT_ENTITY_LABELS[$entity] ?? $entity);
+}
+
 function normalizeHeaderName(string $name): string
 {
     $name = mb_strtolower(trim($name));
@@ -75,7 +81,7 @@ function parseCsvFile(string $path): array
 {
     $content = file_get_contents($path);
     if ($content === false) {
-        return ['headers' => [], 'rows' => [], 'error' => 'امکان خواندن فایل وجود نداشت.'];
+        return ['headers' => [], 'rows' => [], 'error' => t('import.cannot_read_file')];
     }
 
     if (str_starts_with($content, "\xEF\xBB\xBF")) {
@@ -86,14 +92,14 @@ function parseCsvFile(string $path): array
     $lines = array_values($lines);
 
     if (!$lines) {
-        return ['headers' => [], 'rows' => [], 'error' => 'فایل خالی است.'];
+        return ['headers' => [], 'rows' => [], 'error' => t('import.file_empty')];
     }
 
     $headers = str_getcsv(array_shift($lines));
     $headers = array_map(static fn ($h) => trim((string) $h), $headers);
 
     if (count($lines) > 2000) {
-        return ['headers' => $headers, 'rows' => [], 'error' => 'فایل بیش از ۲۰۰۰ ردیف دارد. لطفاً آن را به فایل‌های کوچک‌تر تقسیم کنید.'];
+        return ['headers' => $headers, 'rows' => [], 'error' => t('import.file_too_many_rows')];
     }
 
     $rows = [];
@@ -183,16 +189,16 @@ function validateImportRow(string $entity, array $mapped, PDO $pdo): array
     foreach ($fields as $field) {
         $value = $mapped[$field['key']] ?? '';
         if ($field['required'] && $value === '') {
-            $errors[] = $field['label'] . ' الزامی است.';
+            $errors[] = t('import.field_required', ['label' => $field['label']]);
             continue;
         }
         if ($value !== '' && $field['enum'] !== null && normalizeEnumValue($value, $field['enum']) === null) {
-            $errors[] = 'مقدار نامعتبر برای ' . $field['label'] . ': «' . $value . '»';
+            $errors[] = t('import.invalid_field_value', ['label' => $field['label'], 'value' => $value]);
         }
     }
 
     if ($entity === 'email' && ($mapped['email_address'] ?? '') !== '' && !filter_var($mapped['email_address'], FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'آدرس ایمیل معتبر نیست.';
+        $errors[] = t('import.invalid_email');
     }
 
     if ($entity === 'account') {
@@ -200,14 +206,14 @@ function validateImportRow(string $entity, array $mapped, PDO $pdo): array
             $stmt = $pdo->prepare('SELECT id FROM services WHERE service_name = ? COLLATE NOCASE');
             $stmt->execute([$mapped['service_name']]);
             if (!$stmt->fetchColumn()) {
-                $errors[] = 'سرویسی با نام «' . $mapped['service_name'] . '» یافت نشد؛ ابتدا آن را اضافه کنید.';
+                $errors[] = t('import.service_not_found', ['name' => $mapped['service_name']]);
             }
         }
         if (($mapped['email_address'] ?? '') !== '') {
             $stmt = $pdo->prepare('SELECT id FROM emails WHERE email_address = ? COLLATE NOCASE');
             $stmt->execute([$mapped['email_address']]);
             if (!$stmt->fetchColumn()) {
-                $errors[] = 'ایمیلی با آدرس «' . $mapped['email_address'] . '» یافت نشد؛ ابتدا آن را اضافه کنید.';
+                $errors[] = t('import.email_not_found', ['addr' => $mapped['email_address']]);
             }
         }
     }
@@ -355,7 +361,7 @@ function importRow(PDO $pdo, string $entity, array $mapped, array $mapping, stri
             }
         }
 
-        log_history($pdo, $entity, $existingId, $updatedLabel, null, null, 'به‌روزرسانی شده از فایل Import');
+        log_history($pdo, $entity, $existingId, $updatedLabel, null, null, t('import.updated_from_file'));
         log_history($pdo, $entity, $existingId, 'Imported', 'source', null, $source);
         return ['status' => 'updated', 'id' => $existingId];
     }

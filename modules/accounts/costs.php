@@ -19,22 +19,22 @@ ksort($byCurrency);
 $renewalsWidgetDays = 30;
 $renewalsData = fetchRenewals($pdo, $renewalsWidgetDays);
 
-$pageTitle = 'هزینه‌ها و تمدیدها';
+$pageTitle = t('accounts.costs');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h1 class="h4 mb-0">هزینه‌ها و تمدیدها</h1>
-    <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست اکانت‌ها</a>
+    <h1 class="h4 mb-0"><?= e(t('accounts.costs')) ?></h1>
+    <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('accounts.back_to_accounts_list')) ?></a>
 </div>
 
 <div class="card am-card mb-4">
-    <div class="card-header bg-white fw-bold">هزینه Subscriptionهای فعال (Paid) به تفکیک ارز</div>
+    <div class="card-header bg-white fw-bold"><?= e(t('accounts.paid_subs_by_currency_title')) ?></div>
     <div class="card-body">
         <p class="text-muted small">
-            هزینه‌های ارزهای مختلف هرگز با یکدیگر جمع نمی‌شوند. دوره‌های صورتحساب متفاوت (ماهانه/سالانه) نیز جداگانه نمایش داده می‌شوند تا با هم ترکیب نشوند.
+            <?= e(t('accounts.currency_disclaimer2')) ?>
         </p>
         <?php if (!$byCurrency): ?>
-            <p class="text-muted mb-0">هیچ Subscription فعال و پولی با قیمت ثبت‌شده‌ای وجود ندارد.</p>
+            <p class="text-muted mb-0"><?= e(t('accounts.no_paid_subscriptions')) ?></p>
         <?php else: ?>
             <div class="row g-3">
                 <?php foreach ($byCurrency as $currency => $rows): ?>
@@ -44,7 +44,7 @@ require __DIR__ . '/../../includes/header.php';
                             <div class="table-responsive">
                             <table class="table table-sm mb-0">
                                 <thead>
-                                    <tr><th>دوره صورتحساب</th><th class="text-end">تعداد</th><th class="text-end">مجموع</th></tr>
+                                    <tr><th><?= e(t('accounts.th_billing_cycle')) ?></th><th class="text-end"><?= e(t('accounts.th_count')) ?></th><th class="text-end"><?= e(t('accounts.th_total')) ?></th></tr>
                                 </thead>
                                 <tbody>
                                 <?php foreach ($rows as $r): ?>
@@ -65,7 +65,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<h2 class="h5 mb-3">تمدیدها (Renewals)</h2>
+<h2 class="h5 mb-3"><?= e(t('accounts.renewals_title')) ?></h2>
 <?php require __DIR__ . '/../../includes/partials/renewals-widget.php'; ?>
 
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

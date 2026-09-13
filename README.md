@@ -35,7 +35,7 @@ Read more in [docs/ABOUT.md](docs/ABOUT.md) — what it's for, who it's for, and
 - Five-state field model (**Enabled / Disabled / Unknown / Not Set / Not Applicable**) kept visually distinct throughout — an unknown value is never displayed as if it were a known one
 - Bootstrap 5 RTL + locally-hosted Vazirmatn font — no external CDN calls, works offline once installed
 - **Pagination** on every list page (Emails, Services, Accounts, Phone Numbers), with a 10 / 25 / 50 / 100 / 250 / all records-per-page selector; filters and sort order are preserved across pages
-- **Multi-language groundwork** — a language switcher (Persian / English) covering navigation, list pages, status/type labels, and history entries, backed by simple PHP translation files (`lang/fa.php`, `lang/en.php`); per-page forms are still Persian-only (see [Roadmap](#roadmap))
+- **Full Persian/English UI** — a language switcher covering the entire application (every module's Add/Edit/View pages, the CSV import wizard, dashboard, search, Needs Attention, settings), backed by simple PHP translation files (`lang/fa.php`, `lang/en.php`). Only the one-time `install.php` setup page stays Persian-only (see [Roadmap](#roadmap))
 
 ## Tech stack
 
@@ -94,7 +94,7 @@ Deferred by design, in scope for a future release:
 - TXT file import
 - Export (CSV/TXT) for Emails, Accounts, Services, Subscriptions, and Security Reports
 - Reusable import templates
-- Full translation coverage of every Add/Edit/View page (currently list pages, nav, and enum labels only)
+- Translating the one-time `install.php` setup page (deliberately skipped — see CHANGELOG v1.3.0)
 - A dedicated LTR stylesheet for a fully polished English layout
 
 ## Contributing

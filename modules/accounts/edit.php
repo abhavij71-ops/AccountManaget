@@ -12,7 +12,7 @@ $id = (int) ($_GET['id'] ?? 0);
 $account = $id ? fetchAccountById($pdo, $id) : null;
 
 if (!$account) {
-    flashSet('danger', 'اکانت مورد نظر یافت نشد.');
+    flashSet('danger', t('accounts.not_found'));
     header('Location: index.php');
     exit;
 }
@@ -77,7 +77,7 @@ $phones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY phone
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     }
 
     foreach (array_keys($form) as $key) {
@@ -92,43 +92,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $emailId = (int) $form['email_id'];
 
     if (!in_array($serviceId, array_column($services, 'id'), true)) {
-        $errors[] = 'سرویس معتبر انتخاب کنید.';
+        $errors[] = t('accounts.service_required');
     }
     if (!in_array($emailId, array_column($emails, 'id'), true)) {
-        $errors[] = 'ایمیل معتبر انتخاب کنید.';
+        $errors[] = t('accounts.email_required');
     }
     if (!array_key_exists($form['status'], ACCOUNT_STATUSES)) {
-        $errors[] = 'وضعیت اکانت نامعتبر است.';
+        $errors[] = t('accounts.status_invalid');
     }
     if (!array_key_exists($form['account_type'], ACCOUNT_TYPES)) {
-        $errors[] = 'نوع اکانت نامعتبر است.';
+        $errors[] = t('accounts.type_invalid');
     }
     foreach (['twofa_status', 'passkey_status', 'security_key_status', 'security_questions_status'] as $f) {
         if (!array_key_exists($form[$f], SECURITY_STATES)) {
-            $errors[] = 'مقدار وضعیت امنیتی نامعتبر است.';
+            $errors[] = t('msg.invalid_security_status');
             break;
         }
     }
     if (!array_key_exists($form['recovery_status'], RECOVERY_STATUSES)) {
-        $errors[] = 'وضعیت بازیابی نامعتبر است.';
+        $errors[] = t('accounts.recovery_status_invalid');
     }
     if (!array_key_exists($form['recovery_codes_status'], SECURITY_STATES)) {
-        $errors[] = 'وضعیت کدهای بازیابی نامعتبر است.';
+        $errors[] = t('accounts.recovery_codes_status_invalid');
     }
     if (!array_key_exists($form['sub_type'], SUBSCRIPTION_TYPES)) {
-        $errors[] = 'نوع Subscription نامعتبر است.';
+        $errors[] = t('accounts.sub_type_invalid');
     }
     if (!array_key_exists($form['sub_status'], SUBSCRIPTION_STATUSES)) {
-        $errors[] = 'وضعیت Subscription نامعتبر است.';
+        $errors[] = t('accounts.sub_status_invalid');
     }
     if (!array_key_exists($form['sub_billing_cycle'], BILLING_CYCLES)) {
-        $errors[] = 'دوره صورتحساب نامعتبر است.';
+        $errors[] = t('accounts.billing_cycle_invalid');
     }
     if ($form['sub_price'] !== '' && !is_numeric($form['sub_price'])) {
-        $errors[] = 'قیمت باید عدد باشد.';
+        $errors[] = t('accounts.price_must_be_numeric');
     }
     if ($form['pay_last4'] !== '' && !preg_match('/^\d{4}$/', $form['pay_last4'])) {
-        $errors[] = '۴ رقم آخر کارت باید دقیقاً ۴ رقم باشد — هرگز شماره کامل کارت را وارد نکنید.';
+        $errors[] = t('accounts.last4_invalid');
     }
 
     if (!$errors) {
@@ -240,25 +240,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $pdo->commit();
-            flashSet('success', 'تغییرات با موفقیت ذخیره شد.');
+            flashSet('success', t('msg.saved_changes'));
             header('Location: view.php?id=' . $id);
             exit;
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $errors[] = 'خطا در ذخیره تغییرات: ' . $e->getMessage();
+            $errors[] = t('msg.save_error') . $e->getMessage();
         }
     }
 }
 
 $csrf = csrfToken();
-$pageTitle = 'ویرایش اکانت';
+$pageTitle = t('accounts.edit_heading', ['service' => $account['service_name'], 'email' => $account['email_address']]);
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 mb-0">ویرایش اکانت: <?= e($account['service_name']) ?> — <?= e($account['email_address']) ?></h1>
-    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary btn-sm">بازگشت به پروفایل</a>
+    <h1 class="h4 mb-0"><?= e(t('accounts.edit_heading', ['service' => $account['service_name'], 'email' => $account['email_address']])) ?></h1>
+    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_profile')) ?></a>
 </div>
 
 <?php if ($errors): ?>
@@ -273,10 +273,10 @@ require __DIR__ . '/../../includes/header.php';
     <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
 
     <div class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">اطلاعات پایه</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('common.basic_info')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-6">
-                <label class="form-label">سرویس *</label>
+                <label class="form-label"><?= e(t('accounts.field_service_required')) ?></label>
                 <select name="service_id" class="form-select" required>
                     <?php foreach ($services as $s): ?>
                         <option value="<?= (int) $s['id'] ?>" <?= $form['service_id'] === (string) $s['id'] ? 'selected' : '' ?>><?= e($s['service_name']) ?></option>
@@ -284,7 +284,7 @@ require __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">ایمیل *</label>
+                <label class="form-label"><?= e(t('accounts.field_email_required')) ?></label>
                 <select name="email_id" class="form-select" required>
                     <?php foreach ($emails as $em): ?>
                         <option value="<?= (int) $em['id'] ?>" <?= $form['email_id'] === (string) $em['id'] ? 'selected' : '' ?>><?= e($em['email_address']) ?></option>
@@ -292,140 +292,140 @@ require __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">نام کاربری</label>
+                <label class="form-label"><?= e(t('common.field_username')) ?></label>
                 <input type="text" name="username" class="form-control" value="<?= e($form['username']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">نام نمایشی</label>
+                <label class="form-label"><?= e(t('common.field_display_name')) ?></label>
                 <input type="text" name="display_name" class="form-control" value="<?= e($form['display_name']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">شناسه اکانت (Account ID)</label>
+                <label class="form-label"><?= e(t('accounts.field_external_id')) ?></label>
                 <input type="text" name="external_account_id" class="form-control" value="<?= e($form['external_account_id']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">آدرس اکانت (Account URL)</label>
+                <label class="form-label"><?= e(t('accounts.field_account_url')) ?></label>
                 <input type="url" name="account_url" class="form-control" value="<?= e($form['account_url']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">آدرس ورود (Login URL)</label>
+                <label class="form-label"><?= e(t('services.field_login_url')) ?></label>
                 <input type="url" name="login_url" class="form-control" value="<?= e($form['login_url']) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">وضعیت *</label>
+                <label class="form-label"><?= e(t('common.field_status_required')) ?></label>
                 <select name="status" class="form-select"><?= optionsHtml(ACCOUNT_STATUSES, $form['status']) ?></select>
             </div>
             <div class="col-md-3">
-                <label class="form-label">نوع اکانت *</label>
+                <label class="form-label"><?= e(t('accounts.field_type_required')) ?></label>
                 <select name="account_type" class="form-select"><?= optionsHtml(ACCOUNT_TYPES, $form['account_type']) ?></select>
             </div>
             <div class="col-md-2">
-                <label class="form-label">تاریخ ایجاد</label>
+                <label class="form-label"><?= e(t('common.field_created_date')) ?></label>
                 <input type="date" name="created_date" class="form-control" value="<?= e($form['created_date']) ?>">
             </div>
             <div class="col-md-2">
-                <label class="form-label">آخرین ورود</label>
+                <label class="form-label"><?= e(t('accounts.field_last_login')) ?></label>
                 <input type="date" name="last_login" class="form-control" value="<?= e($form['last_login']) ?>">
             </div>
             <div class="col-md-2">
-                <label class="form-label">آخرین تأیید</label>
+                <label class="form-label"><?= e(t('common.field_last_verified')) ?></label>
                 <input type="date" name="last_verified" class="form-control" value="<?= e($form['last_verified']) ?>">
             </div>
             <div class="col-12">
-                <label class="form-label">یادداشت</label>
+                <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>
             </div>
         </div>
     </div>
 
     <div class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">امنیت اکانت</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('accounts.section_security')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label">تأیید دومرحله‌ای (2FA)</label>
+                <label class="form-label"><?= e(t('field.twofa')) ?></label>
                 <select name="twofa_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['twofa_status']) ?></select>
             </div>
             <div class="col-md-8">
-                <label class="form-label">روش 2FA</label>
+                <label class="form-label"><?= e(t('field.twofa_method')) ?></label>
                 <input type="text" name="twofa_method" class="form-control" value="<?= e($form['twofa_method']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">Passkey</label>
+                <label class="form-label"><?= e(t('field.passkey')) ?></label>
                 <select name="passkey_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['passkey_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">کلید امنیتی</label>
+                <label class="form-label"><?= e(t('emails.view_security_key')) ?></label>
                 <select name="security_key_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['security_key_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">سوالات امنیتی</label>
+                <label class="form-label"><?= e(t('field.security_questions')) ?></label>
                 <select name="security_questions_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['security_questions_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">آخرین بررسی امنیتی</label>
+                <label class="form-label"><?= e(t('field.last_security_check')) ?></label>
                 <input type="date" name="last_security_check" class="form-control" value="<?= e($form['last_security_check']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">محل نگهداری Credential</label>
+                <label class="form-label"><?= e(t('accounts.field_credential_storage')) ?></label>
                 <input type="text" name="credential_storage" class="form-control" value="<?= e($form['credential_storage']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">مرجع Credential</label>
+                <label class="form-label"><?= e(t('accounts.field_credential_reference')) ?></label>
                 <input type="text" name="credential_reference" class="form-control" value="<?= e($form['credential_reference']) ?>">
             </div>
             <div class="col-12">
-                <p class="text-muted small mb-0">این سیستم Password Manager نیست — فقط محل نگهداری Credential را ثبت کنید، نه خود رمز عبور، API Key یا کد بازیابی واقعی.</p>
+                <p class="text-muted small mb-0"><?= e(t('accounts.credential_disclaimer')) ?></p>
             </div>
         </div>
     </div>
 
     <div class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">بازیابی (Recovery)</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('section.recovery')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label">وضعیت بازیابی</label>
+                <label class="form-label"><?= e(t('accounts.field_recovery_status')) ?></label>
                 <select name="recovery_status" class="form-select"><?= optionsHtml(RECOVERY_STATUSES, $form['recovery_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">ایمیل بازیابی</label>
+                <label class="form-label"><?= e(t('field.recovery_email')) ?></label>
                 <select name="recovery_email_id" class="form-select">
-                    <option value="">— انتخاب نشده —</option>
+                    <option value=""><?= e(t('common.none_selected')) ?></option>
                     <?php foreach ($emails as $em): ?>
                         <option value="<?= (int) $em['id'] ?>" <?= $form['recovery_email_id'] === (string) $em['id'] ? 'selected' : '' ?>><?= e($em['email_address']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">تلفن بازیابی</label>
+                <label class="form-label"><?= e(t('emails.recovery_phone_label')) ?></label>
                 <select name="recovery_phone_id" class="form-select">
-                    <option value="">— انتخاب نشده —</option>
+                    <option value=""><?= e(t('common.none_selected')) ?></option>
                     <?php foreach ($phones as $ph): ?>
                         <option value="<?= (int) $ph['id'] ?>" <?= $form['recovery_phone_id'] === (string) $ph['id'] ? 'selected' : '' ?>><?= e($ph['phone_number']) ?><?= $ph['label'] ? ' (' . e($ph['label']) . ')' : '' ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">مخاطب بازیابی (Recovery Contact)</label>
+                <label class="form-label"><?= e(t('accounts.field_recovery_contact')) ?></label>
                 <input type="text" name="recovery_contact" class="form-control" value="<?= e($form['recovery_contact']) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">وضعیت کدهای بازیابی</label>
+                <label class="form-label"><?= e(t('field.recovery_codes_status')) ?></label>
                 <select name="recovery_codes_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['recovery_codes_status']) ?></select>
             </div>
             <div class="col-md-3">
-                <label class="form-label">مرجع کدهای بازیابی</label>
+                <label class="form-label"><?= e(t('field.recovery_codes_reference')) ?></label>
                 <input type="text" name="recovery_codes_reference" class="form-control" value="<?= e($form['recovery_codes_reference']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">روش پشتیبان (Backup Method)</label>
+                <label class="form-label"><?= e(t('accounts.field_backup_method')) ?></label>
                 <input type="text" name="backup_method" class="form-control" value="<?= e($form['backup_method']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">آخرین تأیید بازیابی</label>
+                <label class="form-label"><?= e(t('field.last_recovery_verification')) ?></label>
                 <input type="date" name="last_recovery_verification" class="form-control" value="<?= e($form['last_recovery_verification']) ?>">
             </div>
             <div class="col-12">
-                <label class="form-label">یادداشت بازیابی</label>
+                <label class="form-label"><?= e(t('accounts.field_recovery_notes')) ?></label>
                 <textarea name="recovery_notes" class="form-control" rows="2"><?= e($form['recovery_notes']) ?></textarea>
             </div>
         </div>
@@ -435,48 +435,48 @@ require __DIR__ . '/../../includes/header.php';
         <div class="card-header bg-white fw-bold">Subscription</div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label">نوع *</label>
+                <label class="form-label"><?= e(t('emails.field_type_required')) ?></label>
                 <select name="sub_type" id="sub_type" class="form-select"><?= optionsHtml(SUBSCRIPTION_TYPES, $form['sub_type']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">پلن (Plan)</label>
-                <input type="text" name="sub_plan" class="form-control" value="<?= e($form['sub_plan']) ?>" placeholder="مثلاً Pro, Team">
+                <label class="form-label"><?= e(t('accounts.field_plan')) ?></label>
+                <input type="text" name="sub_plan" class="form-control" value="<?= e($form['sub_plan']) ?>" placeholder="<?= e(t('accounts.plan_placeholder')) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">وضعیت *</label>
+                <label class="form-label"><?= e(t('common.field_status_required')) ?></label>
                 <select name="sub_status" class="form-select"><?= optionsHtml(SUBSCRIPTION_STATUSES, $form['sub_status']) ?></select>
             </div>
             <div class="col-md-3">
-                <label class="form-label">قیمت</label>
-                <input type="text" inputmode="decimal" name="sub_price" class="form-control" value="<?= e($form['sub_price']) ?>" placeholder="مثلاً 9.99">
+                <label class="form-label"><?= e(t('accounts.field_price')) ?></label>
+                <input type="text" inputmode="decimal" name="sub_price" class="form-control" value="<?= e($form['sub_price']) ?>" placeholder="<?= e(t('accounts.price_placeholder')) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">ارز (Currency)</label>
-                <input type="text" name="sub_currency" class="form-control" value="<?= e($form['sub_currency']) ?>" maxlength="8" placeholder="مثلاً USD">
+                <label class="form-label"><?= e(t('accounts.field_currency')) ?></label>
+                <input type="text" name="sub_currency" class="form-control" value="<?= e($form['sub_currency']) ?>" maxlength="8" placeholder="<?= e(t('accounts.currency_placeholder')) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">دوره صورتحساب *</label>
+                <label class="form-label"><?= e(t('accounts.field_billing_cycle_required')) ?></label>
                 <select name="sub_billing_cycle" class="form-select"><?= optionsHtml(BILLING_CYCLES, $form['sub_billing_cycle']) ?></select>
             </div>
             <div class="col-md-3">
-                <label class="form-label">تمدید خودکار</label>
+                <label class="form-label"><?= e(t('accounts.field_auto_renewal')) ?></label>
                 <select name="sub_auto_renewal" class="form-select">
-                    <option value="" <?= $form['sub_auto_renewal'] === '' ? 'selected' : '' ?>>نامشخص</option>
-                    <option value="1" <?= $form['sub_auto_renewal'] === '1' ? 'selected' : '' ?>>بله</option>
-                    <option value="0" <?= $form['sub_auto_renewal'] === '0' ? 'selected' : '' ?>>خیر</option>
+                    <option value="" <?= $form['sub_auto_renewal'] === '' ? 'selected' : '' ?>><?= e(t('enum.Unknown')) ?></option>
+                    <option value="1" <?= $form['sub_auto_renewal'] === '1' ? 'selected' : '' ?>><?= e(t('common.yes')) ?></option>
+                    <option value="0" <?= $form['sub_auto_renewal'] === '0' ? 'selected' : '' ?>><?= e(t('common.no')) ?></option>
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">تاریخ شروع</label>
+                <label class="form-label"><?= e(t('accounts.field_start_date')) ?></label>
                 <input type="date" name="sub_start_date" class="form-control" value="<?= e($form['sub_start_date']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">تاریخ تمدید (Renewal Date)</label>
+                <label class="form-label"><?= e(t('accounts.field_renewal_date')) ?></label>
                 <input type="date" name="sub_renewal_date" class="form-control" value="<?= e($form['sub_renewal_date']) ?>">
             </div>
             <div class="col-12">
                 <p class="text-muted small mb-0">
-                    هزینه‌های ارزهای مختلف هرگز با هم جمع نمی‌شوند — هر ارز جداگانه گزارش می‌شود.
+                    <?= e(t('accounts.currency_disclaimer')) ?>
                 </p>
             </div>
         </div>
@@ -485,47 +485,47 @@ require __DIR__ . '/../../includes/header.php';
     <div class="card am-card mb-3">
         <div class="card-header bg-white fw-bold">Payment</div>
         <div class="card-body">
-            <p class="text-muted small">شماره کامل کارت یا CVV هرگز نباید ذخیره شود — فقط ۴ رقم آخر.</p>
+            <p class="text-muted small"><?= e(t('accounts.payment_disclaimer')) ?></p>
             <p id="payment-free-note" class="text-muted small fst-italic" style="display:none;">
-                این Subscription رایگان است — نیازی به اطلاعات پرداخت نیست.
+                <?= e(t('accounts.free_subscription_note')) ?>
             </p>
             <div id="payment-fields" class="row g-3">
                 <div class="col-md-3">
                     <div class="form-check mt-4">
                         <input type="checkbox" name="pay_required" id="pay_required" class="form-check-input" value="1" <?= $form['pay_required'] === '1' ? 'checked' : '' ?>>
-                        <label for="pay_required" class="form-check-label">پرداخت لازم است</label>
+                        <label for="pay_required" class="form-check-label"><?= e(t('accounts.field_payment_required')) ?></label>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">روش پرداخت</label>
-                    <input type="text" name="pay_method" class="form-control" value="<?= e($form['pay_method']) ?>" placeholder="مثلاً Credit Card">
+                    <label class="form-label"><?= e(t('accounts.field_payment_method')) ?></label>
+                    <input type="text" name="pay_method" class="form-control" value="<?= e($form['pay_method']) ?>" placeholder="<?= e(t('accounts.payment_method_placeholder')) ?>">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">برند کارت</label>
-                    <input type="text" name="pay_card_brand" class="form-control" value="<?= e($form['pay_card_brand']) ?>" placeholder="مثلاً Visa">
+                    <label class="form-label"><?= e(t('accounts.field_card_brand')) ?></label>
+                    <input type="text" name="pay_card_brand" class="form-control" value="<?= e($form['pay_card_brand']) ?>" placeholder="<?= e(t('accounts.card_brand_placeholder')) ?>">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">۴ رقم آخر کارت</label>
-                    <input type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" name="pay_last4" class="form-control" value="<?= e($form['pay_last4']) ?>" placeholder="۴ رقم">
+                    <label class="form-label"><?= e(t('accounts.field_last4')) ?></label>
+                    <input type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" name="pay_last4" class="form-control" value="<?= e($form['pay_last4']) ?>" placeholder="<?= e(t('accounts.last4_placeholder')) ?>">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">مرجع پرداخت (Payment Reference)</label>
+                    <label class="form-label"><?= e(t('accounts.field_payment_reference')) ?></label>
                     <input type="text" name="pay_reference" class="form-control" value="<?= e($form['pay_reference']) ?>">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">تمدید خودکار پرداخت</label>
+                    <label class="form-label"><?= e(t('accounts.field_payment_auto_renewal')) ?></label>
                     <select name="pay_auto_renewal" class="form-select">
-                        <option value="" <?= $form['pay_auto_renewal'] === '' ? 'selected' : '' ?>>نامشخص</option>
-                        <option value="1" <?= $form['pay_auto_renewal'] === '1' ? 'selected' : '' ?>>بله</option>
-                        <option value="0" <?= $form['pay_auto_renewal'] === '0' ? 'selected' : '' ?>>خیر</option>
+                        <option value="" <?= $form['pay_auto_renewal'] === '' ? 'selected' : '' ?>><?= e(t('enum.Unknown')) ?></option>
+                        <option value="1" <?= $form['pay_auto_renewal'] === '1' ? 'selected' : '' ?>><?= e(t('common.yes')) ?></option>
+                        <option value="0" <?= $form['pay_auto_renewal'] === '0' ? 'selected' : '' ?>><?= e(t('common.no')) ?></option>
                     </select>
                 </div>
             </div>
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary">ذخیره تغییرات</button>
-    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary">انصراف</a>
+    <button type="submit" class="btn btn-primary"><?= e(t('common.save_changes')) ?></button>
+    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
 </form>
 
 <script>

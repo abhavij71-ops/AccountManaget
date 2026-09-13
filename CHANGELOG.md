@@ -2,6 +2,12 @@
 
 This project was built in sequential phases, each adding a coherent slice of functionality. Dates are omitted since this reflects build order, not a dated release history. Starting with v1.1.0, changes are tracked under semantic version numbers (`APP_VERSION` in `config.php`, shown in the sidebar and in Settings → درباره سیستم).
 
+## v1.3.0
+
+- **Add:** Full translation coverage (fa/en) of essentially the entire application — the four entity modules' Add/Edit/View pages and their security/recovery/subscription/payment sections, the Emails bulk quick-edit and favorite toggle, the Accounts quick-add/bulk-assign/costs pages, the full CSV import wizard (all 4 steps plus the underlying validation/duplicate-detection messages), the dashboard, global search, Needs Attention (including every rule-engine issue message), Settings, and Login. ~590 translation keys across `lang/fa.php` and `lang/en.php`. `install.php` is intentionally left Persian-only — it runs before any session-based language preference can exist, so translating it would have no observable effect, and it's meant to be deleted after first use anyway.
+- **Fix:** `renderBadge()`'s new translation layer (added in v1.2.0) was silently overriding a caller-supplied custom label — three Yes/No badges on the Account profile (subscription auto-renewal, payment required, payment auto-renewal) were showing the generic Enabled/Disabled translation instead of Yes/No. Added a dedicated `yesNoBadge()` helper that never goes through the enum-translation path, and fixed the three call sites.
+- **Fix:** two view-page labels ("Security Key" on Email/Account profiles, "Label" on the Phone profile) had briefly picked up the wrong translation key during the pass above — resolved before commit, view pages now match the original Persian wording exactly when in Persian.
+
 ## v1.2.0
 
 - **Add:** Pagination on the four main list pages (Emails, Services, Accounts, Phone Numbers) — page numbers with prev/next, and a records-per-page selector (10 / 25 / 50 / 100 / 250 / all). All existing filters and sort order are preserved across page/per-page changes. Implemented as shared helpers (`resolvePage`, `resolvePerPage`, `paginationBounds`, `renderPagination`) in `includes/helpers.php`.
@@ -52,5 +58,5 @@ Delete added for every entity (distinct from Archive and Unlink, with confirmati
 - TXT file import
 - Export (CSV/TXT) for Emails, Accounts, Services, Subscriptions, Security Reports
 - Reusable import templates
-- Full translation coverage of every Add/Edit/View page (v1.2.0 only translated the four list pages, shared nav, enum badges, and history labels)
+- Translating `install.php` (deliberately skipped — see v1.3.0 note)
 - A dedicated LTR Bootstrap build for a fully polished English layout

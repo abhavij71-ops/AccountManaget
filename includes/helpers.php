@@ -156,6 +156,22 @@ function renderBadge(?string $value, array $labelMap = []): string
     return '<span class="badge ' . badgeClassFor($value) . '">' . e($label) . '</span>';
 }
 
+/**
+ * Renders a Yes/No/Unknown badge for a tri-state boolean flag (e.g. auto-renewal,
+ * payment required). Deliberately bypasses renderBadge()/enumLabel() so the
+ * Yes/No wording is never swapped out for the generic Enabled/Disabled enum
+ * translation.
+ */
+function yesNoBadge(?bool $value): string
+{
+    if ($value === null) {
+        return renderBadge('Unknown');
+    }
+    $class = $value ? 'badge-enabled' : 'badge-disabled';
+    $label = $value ? t('common.yes') : t('common.no');
+    return '<span class="badge ' . $class . '">' . e($label) . '</span>';
+}
+
 function optionsHtml(array $map, ?string $selected = null): string
 {
     $html = '';
