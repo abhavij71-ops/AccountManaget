@@ -46,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = csrfToken();
+$bs = currentTextDirection() === 'rtl' ? 'bootstrap.rtl.min.css' : 'bootstrap.min.css';
 ?>
 <!DOCTYPE html>
 <html lang="<?= e(currentLanguage()) ?>" dir="<?= e(currentTextDirection()) ?>">
@@ -53,7 +54,7 @@ $csrf = csrfToken();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e(t('login.submit_button')) ?> | <?= e(APP_NAME) ?></title>
-    <link rel="stylesheet" href="assets/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="<?= e('assets/css/' . $bs) ?>">
     <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body class="d-flex align-items-center justify-content-center" style="min-height:100vh;">

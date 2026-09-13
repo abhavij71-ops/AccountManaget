@@ -1,18 +1,37 @@
 <?php
 declare(strict_types=1);
 
-const SUPPORTED_LANGUAGES = ['fa' => 'فارسی', 'en' => 'English'];
 const DEFAULT_LANGUAGE = 'fa';
+
+/**
+ * Discovers installed languages from lang/*.php and reads each one's
+ * display name from its own 'app.native_name' key, so adding a language
+ * only requires dropping a new lang/<code>.php file — no code edit.
+ */
+function supportedLanguages(): array
+{
+    static $languages = null;
+    if ($languages !== null) {
+        return $languages;
+    }
+
+    $languages = [];
+    foreach (glob(APP_ROOT . '/lang/*.php') as $file) {
+        $code = basename($file, '.php');
+        $languages[$code] = loadTranslations($code)['app.native_name'] ?? $code;
+    }
+    return $languages;
+}
 
 function currentLanguage(): string
 {
     $lang = (string) ($_SESSION['lang'] ?? DEFAULT_LANGUAGE);
-    return array_key_exists($lang, SUPPORTED_LANGUAGES) ? $lang : DEFAULT_LANGUAGE;
+    return array_key_exists($lang, supportedLanguages()) ? $lang : DEFAULT_LANGUAGE;
 }
 
 function setLanguage(string $lang): void
 {
-    if (array_key_exists($lang, SUPPORTED_LANGUAGES)) {
+    if (array_key_exists($lang, supportedLanguages())) {
         $_SESSION['lang'] = $lang;
     }
 }

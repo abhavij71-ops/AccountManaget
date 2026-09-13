@@ -354,6 +354,8 @@ if (!$alreadyInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = csrfToken();
+// No language session exists yet at install time — default to RTL.
+$bs = 'bootstrap.rtl.min.css';
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -361,7 +363,7 @@ $csrf = csrfToken();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>نصب | <?= htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8') ?></title>
-    <link rel="stylesheet" href="assets/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="<?= htmlspecialchars('assets/css/' . $bs, ENT_QUOTES, 'UTF-8') ?>">
     <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body class="d-flex align-items-center justify-content-center" style="min-height:100vh;">

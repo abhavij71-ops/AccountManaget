@@ -602,4 +602,6 @@ return [
     'db.connection_error' => 'Database connection error: :error',
 
     'common.list_separator' => ', ',
+
+    'app.native_name' => 'English',
 ];

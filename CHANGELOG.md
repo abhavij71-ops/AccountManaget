@@ -2,6 +2,13 @@
 
 This project was built in sequential phases, each adding a coherent slice of functionality. Dates are omitted since this reflects build order, not a dated release history. Starting with v1.1.0, changes are tracked under semantic version numbers (`APP_VERSION` in `config.php`, shown in the sidebar and in Settings → درباره سیستم).
 
+## v1.4.0
+
+- **Add:** Arabic translation (`lang/ar.php`) — full coverage, same 568 keys as `lang/en.php`, `dir` set to `rtl`.
+- **Add:** Languages are now discovered dynamically. `supportedLanguages()` (`includes/lang.php`) globs `lang/*.php` and reads each file's own `app.native_name` key, so adding a language no longer requires a code change — just drop a new `lang/<code>.php` file. Replaces the old `SUPPORTED_LANGUAGES` constant.
+- **Add:** LTR Bootstrap support — `header.php`, `login.php`, and `install.php` now pick `bootstrap.min.css` or `bootstrap.rtl.min.css` based on the current text direction, instead of always loading the RTL build. (`install.php` has no language session yet, so it still defaults to RTL.) Requires placing a matching-version `assets/css/bootstrap.min.css` alongside the existing RTL build.
+- **Fix:** Last remaining hardcoded Persian strings moved into the translation system — the `db.php` connection-failure message (new `db.connection_error` key; `lang.php` is now required early enough in `db.php` to use `t()`, since `config.php` already starts the session) and the list separator used by the CSV import wizard when reporting missing required fields / differing duplicate fields (new `common.list_separator` key).
+
 ## v1.3.0
 
 - **Add:** Full translation coverage (fa/en) of essentially the entire application — the four entity modules' Add/Edit/View pages and their security/recovery/subscription/payment sections, the Emails bulk quick-edit and favorite toggle, the Accounts quick-add/bulk-assign/costs pages, the full CSV import wizard (all 4 steps plus the underlying validation/duplicate-detection messages), the dashboard, global search, Needs Attention (including every rule-engine issue message), Settings, and Login. ~590 translation keys across `lang/fa.php` and `lang/en.php`. `install.php` is intentionally left Persian-only — it runs before any session-based language preference can exist, so translating it would have no observable effect, and it's meant to be deleted after first use anyway.
