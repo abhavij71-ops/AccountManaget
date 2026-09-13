@@ -135,7 +135,7 @@ require __DIR__ . '/../../includes/header.php';
                                 <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
                                 <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
                                 <input type="hidden" name="redirect" value="<?= e($favoriteRedirect) ?>">
-                                <button type="submit" class="am-favorite-btn<?= $isFavorite ? ' is-favorite' : '' ?>" aria-pressed="<?= $isFavorite ? 'true' : 'false' ?>" title="<?= $isFavorite ? 'حذف از موارد ویژه' : 'افزودن به موارد ویژه' ?>"><?= $isFavorite ? '★' : '☆' ?></button>
+                                <button type="submit" class="am-favorite-btn<?= $isFavorite ? ' is-favorite' : '' ?>" aria-pressed="<?= $isFavorite ? 'true' : 'false' ?>" title="<?= $isFavorite ? e(t('emails.favorite_remove_title')) : e(t('emails.favorite_add_title')) ?>"><?= $isFavorite ? '★' : '☆' ?></button>
                             </form>
                         </td>
                         <td><a href="view.php?id=<?= (int) $row['id'] ?>"><?= e($row['email_address']) ?></a></td>
@@ -157,6 +157,9 @@ require __DIR__ . '/../../includes/header.php';
 <?php endif; ?>
 
 <script>
+var AM_FAVORITE_ADD_TITLE = <?= json_encode(t('emails.favorite_add_title'), JSON_UNESCAPED_UNICODE) ?>;
+var AM_FAVORITE_REMOVE_TITLE = <?= json_encode(t('emails.favorite_remove_title'), JSON_UNESCAPED_UNICODE) ?>;
+
 document.querySelectorAll('form.am-favorite-form').forEach(function (form) {
     form.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -173,7 +176,7 @@ document.querySelectorAll('form.am-favorite-form').forEach(function (form) {
             btn.classList.toggle('is-favorite', data.is_favorite);
             btn.textContent = data.is_favorite ? '★' : '☆';
             btn.setAttribute('aria-pressed', data.is_favorite ? 'true' : 'false');
-            btn.title = data.is_favorite ? 'حذف از موارد ویژه' : 'افزودن به موارد ویژه';
+            btn.title = data.is_favorite ? AM_FAVORITE_REMOVE_TITLE : AM_FAVORITE_ADD_TITLE;
         }).catch(function () {
             form.submit();
         });

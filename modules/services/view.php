@@ -15,14 +15,14 @@ $stmt->execute([$id]);
 $service = $stmt->fetch();
 
 if (!$service) {
-    flashSet('danger', 'سرویس مورد نظر یافت نشد.');
+    flashSet('danger', t('services.not_found'));
     header('Location: index.php');
     exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        flashSet('danger', 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.');
+        flashSet('danger', t('msg.invalid_request'));
         header('Location: view.php?id=' . $id);
         exit;
     }
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($tagName !== '') {
             attachTag($pdo, 'service', $id, $tagName);
             log_history($pdo, 'service', $id, 'Tag Added', null, null, $tagName);
-            flashSet('success', 'برچسب اضافه شد.');
+            flashSet('success', t('common.tag_added'));
         }
     } elseif ($action === 'remove_tag') {
         $tagId = (int) ($_POST['tag_id'] ?? 0);
@@ -45,16 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($tagName) {
             log_history($pdo, 'service', $id, 'Tag Removed', null, (string) $tagName, null);
         }
-        flashSet('success', 'برچسب حذف شد.');
+        flashSet('success', t('common.tag_removed'));
     } elseif ($action === 'delete') {
         try {
             $pdo->prepare('DELETE FROM services WHERE id = ?')->execute([$id]);
             $pdo->prepare('DELETE FROM taggables WHERE entity_type = ? AND entity_id = ?')->execute(['service', $id]);
-            flashSet('success', 'سرویس «' . $service['service_name'] . '» برای همیشه حذف شد.');
+            flashSet('success', t('services.deleted_success', ['name' => $service['service_name']]));
             header('Location: index.php');
             exit;
         } catch (Throwable $e) {
-            flashSet('danger', 'این سرویس دارای اکانت‌های مرتبط است و قابل حذف نیست — ابتدا آن اکانت‌ها را حذف یا منتقل کنید.');
+            flashSet('danger', t('services.delete_blocked'));
         }
     }
 
@@ -99,18 +99,18 @@ require __DIR__ . '/../../includes/header.php';
             <?= $service['category'] === 'Not Set' ? renderBadge('Not Set') : '<span class="badge bg-light text-dark border">' . e($service['category']) . '</span>' ?>
             <?= renderBadge($service['status'], SERVICE_STATUSES) ?>
             <?php if ($service['website']): ?>
-                <a href="<?= e($service['website']) ?>" target="_blank" rel="noopener" class="small">وب‌سایت &#8599;</a>
+                <a href="<?= e($service['website']) ?>" target="_blank" rel="noopener" class="small"><?= e(t('services.website_link')) ?> &#8599;</a>
             <?php endif; ?>
         </div>
     </div>
     <div class="d-flex gap-2">
-        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm">ویرایش</a>
-        <form method="post" class="d-inline" data-confirm="این سرویس برای همیشه حذف شود؟ این عملیات قابل بازگشت نیست.">
+        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
+        <form method="post" class="d-inline" data-confirm="<?= e(t('services.delete_confirm')) ?>">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="delete">
-            <button type="submit" class="btn btn-outline-danger btn-sm">حذف</button>
+            <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
         </form>
-        <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست</a>
+        <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
     </div>
 </div>
 
@@ -118,7 +118,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="col-6 col-md-3">
         <div class="card am-card text-center h-100">
             <div class="card-body">
-                <div class="text-muted small mb-1">تعداد اکانت‌ها</div>
+                <div class="text-muted small mb-1"><?= e(t('services.account_count')) ?></div>
                 <div class="h3 mb-0"><?= (int) $accountsCount ?></div>
             </div>
         </div>
@@ -126,7 +126,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="col-6 col-md-3">
         <div class="card am-card text-center h-100">
             <div class="card-body">
-                <div class="text-muted small mb-1">تعداد ایمیل‌ها</div>
+                <div class="text-muted small mb-1"><?= e(t('services.email_count')) ?></div>
                 <div class="h3 mb-0"><?= (int) $emailsCount ?></div>
             </div>
         </div>
@@ -134,7 +134,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="col-6 col-md-3">
         <div class="card am-card text-center h-100">
             <div class="card-body">
-                <div class="text-muted small mb-1">اکانت‌های Paid</div>
+                <div class="text-muted small mb-1"><?= e(t('services.paid_accounts')) ?></div>
                 <div class="h3 mb-0"><?= (int) $paidCount ?></div>
             </div>
         </div>
@@ -142,7 +142,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="col-6 col-md-3">
         <div class="card am-card text-center h-100">
             <div class="card-body">
-                <div class="text-muted small mb-1">مسائل (Issues)</div>
+                <div class="text-muted small mb-1"><?= e(t('services.issues_stat')) ?></div>
                 <div class="h3 mb-0"><?= (int) $issuesCount ?></div>
             </div>
         </div>
@@ -152,49 +152,49 @@ require __DIR__ . '/../../includes/header.php';
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">اطلاعات سرویس</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('services.info_title')) ?></div>
             <div class="card-body">
                 <dl class="row mb-0">
-                    <dt class="col-5">آدرس ورود</dt><dd class="col-7"><?= dashOrValue($service['login_url']) ?></dd>
-                    <dt class="col-5">هدف استفاده</dt><dd class="col-7"><?= dashOrValue($service['purpose']) ?></dd>
+                    <dt class="col-5"><?= e(t('services.view_login_url')) ?></dt><dd class="col-7"><?= dashOrValue($service['login_url']) ?></dd>
+                    <dt class="col-5"><?= e(t('services.view_purpose')) ?></dt><dd class="col-7"><?= dashOrValue($service['purpose']) ?></dd>
                 </dl>
             </div>
         </div>
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">یادداشت</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('common.field_notes')) ?></div>
             <div class="card-body">
-                <?= $service['notes'] ? nl2br(e($service['notes'])) : '<span class="text-muted fst-italic">یادداشتی ثبت نشده است.</span>' ?>
+                <?= $service['notes'] ? nl2br(e($service['notes'])) : '<span class="text-muted fst-italic">' . e(t('common.no_notes')) . '</span>' ?>
             </div>
         </div>
     </div>
     <div class="col-lg-6">
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">وضعیت امنیتی اکانت‌های این سرویس (2FA)</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('services.security_overview_title')) ?></div>
             <div class="card-body d-flex gap-2 flex-wrap">
-                <span class="badge badge-enabled">فعال: <?= (int) $twofaBreakdown['Enabled'] ?></span>
-                <span class="badge badge-disabled">غیرفعال: <?= (int) $twofaBreakdown['Disabled'] ?></span>
-                <span class="badge badge-unknown">نامشخص: <?= (int) $twofaBreakdown['Unknown'] ?></span>
-                <span class="badge badge-not-set">تنظیم‌نشده: <?= (int) $twofaBreakdown['Not Set'] ?></span>
-                <span class="badge badge-not-applicable">غیرقابل‌اعمال: <?= (int) $twofaBreakdown['Not Applicable'] ?></span>
+                <span class="badge badge-enabled"><?= e(t('enum.Enabled')) ?>: <?= (int) $twofaBreakdown['Enabled'] ?></span>
+                <span class="badge badge-disabled"><?= e(t('enum.Disabled')) ?>: <?= (int) $twofaBreakdown['Disabled'] ?></span>
+                <span class="badge badge-unknown"><?= e(t('enum.Unknown')) ?>: <?= (int) $twofaBreakdown['Unknown'] ?></span>
+                <span class="badge badge-not-set"><?= e(t('enum.Not Set')) ?>: <?= (int) $twofaBreakdown['Not Set'] ?></span>
+                <span class="badge badge-not-applicable"><?= e(t('enum.Not Applicable')) ?>: <?= (int) $twofaBreakdown['Not Applicable'] ?></span>
             </div>
         </div>
     </div>
 </div>
 
 <div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold">اکانت‌های این سرویس</div>
+    <div class="card-header bg-white fw-bold"><?= e(t('services.accounts_title')) ?></div>
     <div class="card-body">
         <?php if (!$accounts): ?>
-            <p class="text-muted mb-0">هنوز اکانتی برای این سرویس ثبت نشده است.</p>
+            <p class="text-muted mb-0"><?= e(t('services.no_accounts')) ?></p>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>ایمیل</th><th>نام کاربری</th><th>وضعیت</th><th>پلن</th><th>2FA</th><th>آخرین تأیید</th></tr></thead>
+                    <thead><tr><th><?= e(t('accounts.th_email')) ?></th><th><?= e(t('accounts.th_username')) ?></th><th><?= e(t('common.field_status')) ?></th><th><?= e(t('accounts.th_plan')) ?></th><th>2FA</th><th><?= e(t('common.field_last_verified')) ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($accounts as $acc): ?>
                         <tr>
                             <td><a href="../emails/view.php?id=<?= (int) $acc['email_id'] ?>"><?= e($acc['email_address']) ?></a></td>
-                            <td><a href="../accounts/view.php?id=<?= (int) $acc['id'] ?>"><?= $acc['username'] ? e($acc['username']) : 'مشاهده اکانت' ?></a></td>
+                            <td><a href="../accounts/view.php?id=<?= (int) $acc['id'] ?>"><?= $acc['username'] ? e($acc['username']) : e(t('emails.view_account')) ?></a></td>
                             <td><?= renderBadge($acc['status'], ACCOUNT_STATUSES) ?></td>
                             <td><?= dashOrValue($acc['plan']) ?></td>
                             <td><?= renderBadge($acc['twofa_status'], SECURITY_STATES) ?></td>
@@ -209,10 +209,10 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold">برچسب‌ها (Tags)</div>
+    <div class="card-header bg-white fw-bold"><?= e(t('common.tags_title')) ?></div>
     <div class="card-body">
         <?php if (!$tags): ?>
-            <p class="text-muted">هیچ برچسبی ثبت نشده است.</p>
+            <p class="text-muted"><?= e(t('common.no_tags')) ?></p>
         <?php else: ?>
             <div class="d-flex gap-2 flex-wrap mb-2">
                 <?php foreach ($tags as $tag): ?>
@@ -230,20 +230,20 @@ require __DIR__ . '/../../includes/header.php';
         <form method="post" class="d-flex gap-2">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="add_tag">
-            <input type="text" name="tag_name" class="form-control form-control-sm" list="tag-list" placeholder="نام برچسب">
+            <input type="text" name="tag_name" class="form-control form-control-sm" list="tag-list" placeholder="<?= e(t('common.tag_name_placeholder')) ?>">
             <datalist id="tag-list">
                 <?php foreach ($allTagNames as $tn): ?><option value="<?= e($tn) ?>"><?php endforeach; ?>
             </datalist>
-            <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">افزودن برچسب</button>
+            <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap"><?= e(t('common.add_tag')) ?></button>
         </form>
     </div>
 </div>
 
 <div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold">تاریخچه (History)</div>
+    <div class="card-header bg-white fw-bold"><?= e(t('common.history_title')) ?></div>
     <div class="card-body">
         <?php if (!$historyRows): ?>
-            <p class="text-muted mb-0">هنوز تغییری ثبت نشده است.</p>
+            <p class="text-muted mb-0"><?= e(t('common.no_history')) ?></p>
         <?php else: ?>
             <ul class="list-unstyled mb-0">
                 <?php foreach ($historyRows as $h): ?>
@@ -255,7 +255,7 @@ require __DIR__ . '/../../includes/header.php';
                         <?php if ($h['field_name'] || $h['old_value'] !== null || $h['new_value'] !== null): ?>
                             <div class="small text-muted">
                                 <?= $h['field_name'] ? e($h['field_name']) . ': ' : '' ?>
-                                از <?= dashOrValue($h['old_value']) ?> به <?= dashOrValue($h['new_value']) ?>
+                                <?= e(t('common.history_from')) ?> <?= dashOrValue($h['old_value']) ?> <?= e(t('common.history_to')) ?> <?= dashOrValue($h['new_value']) ?>
                             </div>
                         <?php endif; ?>
                     </li>

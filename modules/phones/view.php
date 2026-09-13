@@ -14,14 +14,14 @@ $stmt->execute([$id]);
 $phone = $stmt->fetch();
 
 if (!$phone) {
-    flashSet('danger', 'شماره تلفن مورد نظر یافت نشد.');
+    flashSet('danger', t('phones.not_found'));
     header('Location: index.php');
     exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        flashSet('danger', 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.');
+        flashSet('danger', t('msg.invalid_request'));
         header('Location: view.php?id=' . $id);
         exit;
     }
@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($tagName !== '') {
             attachTag($pdo, 'phone', $id, $tagName);
             log_history($pdo, 'phone', $id, 'Tag Added', null, null, $tagName);
-            flashSet('success', 'برچسب اضافه شد.');
+            flashSet('success', t('common.tag_added'));
         }
     } elseif ($action === 'remove_tag') {
         $tagId = (int) ($_POST['tag_id'] ?? 0);
@@ -44,11 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($tagName) {
             log_history($pdo, 'phone', $id, 'Tag Removed', null, (string) $tagName, null);
         }
-        flashSet('success', 'برچسب حذف شد.');
+        flashSet('success', t('common.tag_removed'));
     } elseif ($action === 'delete') {
         $pdo->prepare('DELETE FROM phones WHERE id = ?')->execute([$id]);
         $pdo->prepare('DELETE FROM taggables WHERE entity_type = ? AND entity_id = ?')->execute(['phone', $id]);
-        flashSet('success', 'شماره تلفن «' . $phone['phone_number'] . '» برای همیشه حذف شد. اتصال آن به ایمیل‌ها و اکانت‌ها نیز قطع شد (بدون حذف خود آن‌ها).');
+        flashSet('success', t('phones.deleted_success', ['name' => $phone['phone_number']]));
         header('Location: index.php');
         exit;
     }
@@ -91,46 +91,46 @@ require __DIR__ . '/../../includes/header.php';
         <div class="d-flex gap-2 flex-wrap align-items-center">
             <?= renderBadge($phone['status'], PHONE_STATUSES) ?>
             <?php if ((int) $phone['is_primary'] === 1): ?>
-                <span class="badge badge-enabled">شماره اصلی</span>
+                <span class="badge badge-enabled"><?= e(t('phones.primary_badge')) ?></span>
             <?php endif; ?>
         </div>
     </div>
     <div class="d-flex gap-2">
-        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm">ویرایش</a>
-        <form method="post" class="d-inline" data-confirm="این شماره تلفن برای همیشه حذف شود؟ این عملیات قابل بازگشت نیست.">
+        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
+        <form method="post" class="d-inline" data-confirm="<?= e(t('phones.delete_confirm')) ?>">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="delete">
-            <button type="submit" class="btn btn-outline-danger btn-sm">حذف</button>
+            <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
         </form>
-        <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست</a>
+        <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
     </div>
 </div>
 
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">اطلاعات پایه</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('common.basic_info')) ?></div>
             <div class="card-body">
                 <dl class="row mb-0">
-                    <dt class="col-5">کشور</dt><dd class="col-7"><?= dashOrValue($phone['country']) ?></dd>
-                    <dt class="col-5">برچسب</dt><dd class="col-7"><?= dashOrValue($phone['label']) ?></dd>
+                    <dt class="col-5"><?= e(t('phones.field_country')) ?></dt><dd class="col-7"><?= dashOrValue($phone['country']) ?></dd>
+                    <dt class="col-5"><?= e(t('phones.view_label')) ?></dt><dd class="col-7"><?= dashOrValue($phone['label']) ?></dd>
                 </dl>
             </div>
         </div>
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">یادداشت</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('common.field_notes')) ?></div>
             <div class="card-body">
-                <?= $phone['notes'] ? nl2br(e($phone['notes'])) : '<span class="text-muted fst-italic">یادداشتی ثبت نشده است.</span>' ?>
+                <?= $phone['notes'] ? nl2br(e($phone['notes'])) : '<span class="text-muted fst-italic">' . e(t('common.no_notes')) . '</span>' ?>
             </div>
         </div>
     </div>
 
     <div class="col-lg-6">
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">ایمیل‌های متصل</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('phones.linked_emails_title')) ?></div>
             <div class="card-body">
                 <?php if (!$linkedEmails): ?>
-                    <p class="text-muted mb-0">این شماره به هیچ ایمیلی متصل نیست.</p>
+                    <p class="text-muted mb-0"><?= e(t('phones.no_linked_emails')) ?></p>
                 <?php else: ?>
                     <ul class="list-unstyled mb-0">
                         <?php foreach ($linkedEmails as $em): ?>
@@ -142,10 +142,10 @@ require __DIR__ . '/../../includes/header.php';
         </div>
 
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold">استفاده به‌عنوان شماره بازیابی برای</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('phones.recovery_for_title')) ?></div>
             <div class="card-body">
                 <?php if (!$recoveryForEmails): ?>
-                    <p class="text-muted mb-0">این شماره به‌عنوان شماره بازیابی هیچ ایمیلی ثبت نشده است.</p>
+                    <p class="text-muted mb-0"><?= e(t('phones.no_recovery_for')) ?></p>
                 <?php else: ?>
                     <ul class="list-unstyled mb-0">
                         <?php foreach ($recoveryForEmails as $em): ?>
@@ -159,19 +159,19 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold">اکانت‌های متصل</div>
+    <div class="card-header bg-white fw-bold"><?= e(t('phones.linked_accounts_title')) ?></div>
     <div class="card-body">
         <?php if (!$linkedAccounts): ?>
-            <p class="text-muted mb-0">این شماره به هیچ اکانتی متصل نیست.</p>
+            <p class="text-muted mb-0"><?= e(t('phones.no_linked_accounts')) ?></p>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th>سرویس</th><th>نام کاربری</th><th>وضعیت</th></tr></thead>
+                    <thead><tr><th><?= e(t('accounts.th_service')) ?></th><th><?= e(t('accounts.th_username')) ?></th><th><?= e(t('common.field_status')) ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($linkedAccounts as $acc): ?>
                         <tr>
                             <td><a href="../services/view.php?id=<?= (int) $acc['service_id'] ?>"><?= e($acc['service_name']) ?></a></td>
-                            <td><a href="../accounts/view.php?id=<?= (int) $acc['id'] ?>"><?= $acc['username'] ? e($acc['username']) : 'مشاهده اکانت' ?></a></td>
+                            <td><a href="../accounts/view.php?id=<?= (int) $acc['id'] ?>"><?= $acc['username'] ? e($acc['username']) : e(t('emails.view_account')) ?></a></td>
                             <td><?= renderBadge($acc['status'], ACCOUNT_STATUSES) ?></td>
                         </tr>
                     <?php endforeach; ?>
@@ -183,10 +183,10 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold">برچسب‌ها (Tags)</div>
+    <div class="card-header bg-white fw-bold"><?= e(t('common.tags_title')) ?></div>
     <div class="card-body">
         <?php if (!$tags): ?>
-            <p class="text-muted">هیچ برچسبی ثبت نشده است.</p>
+            <p class="text-muted"><?= e(t('common.no_tags')) ?></p>
         <?php else: ?>
             <div class="d-flex gap-2 flex-wrap mb-2">
                 <?php foreach ($tags as $tag): ?>
@@ -204,20 +204,20 @@ require __DIR__ . '/../../includes/header.php';
         <form method="post" class="d-flex gap-2">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="add_tag">
-            <input type="text" name="tag_name" class="form-control form-control-sm" list="tag-list" placeholder="نام برچسب">
+            <input type="text" name="tag_name" class="form-control form-control-sm" list="tag-list" placeholder="<?= e(t('common.tag_name_placeholder')) ?>">
             <datalist id="tag-list">
                 <?php foreach ($allTagNames as $tn): ?><option value="<?= e($tn) ?>"><?php endforeach; ?>
             </datalist>
-            <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">افزودن برچسب</button>
+            <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap"><?= e(t('common.add_tag')) ?></button>
         </form>
     </div>
 </div>
 
 <div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold">تاریخچه (History)</div>
+    <div class="card-header bg-white fw-bold"><?= e(t('common.history_title')) ?></div>
     <div class="card-body">
         <?php if (!$historyRows): ?>
-            <p class="text-muted mb-0">هنوز تغییری ثبت نشده است.</p>
+            <p class="text-muted mb-0"><?= e(t('common.no_history')) ?></p>
         <?php else: ?>
             <ul class="list-unstyled mb-0">
                 <?php foreach ($historyRows as $h): ?>
@@ -229,7 +229,7 @@ require __DIR__ . '/../../includes/header.php';
                         <?php if ($h['field_name'] || $h['old_value'] !== null || $h['new_value'] !== null): ?>
                             <div class="small text-muted">
                                 <?= $h['field_name'] ? e($h['field_name']) . ': ' : '' ?>
-                                از <?= dashOrValue($h['old_value']) ?> به <?= dashOrValue($h['new_value']) ?>
+                                <?= e(t('common.history_from')) ?> <?= dashOrValue($h['old_value']) ?> <?= e(t('common.history_to')) ?> <?= dashOrValue($h['new_value']) ?>
                             </div>
                         <?php endif; ?>
                     </li>

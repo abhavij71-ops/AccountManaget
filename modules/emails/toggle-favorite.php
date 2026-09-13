@@ -36,7 +36,7 @@ if (!verifyCsrfToken($_POST['csrf_token'] ?? null) || !$id) {
         http_response_code(400);
         respond(false);
     }
-    flashSet('danger', 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.');
+    flashSet('danger', t('msg.invalid_request'));
     header('Location: ' . $redirect);
     exit;
 }
@@ -49,7 +49,7 @@ if (!$email) {
         http_response_code(404);
         respond(false);
     }
-    flashSet('danger', 'ایمیل مورد نظر یافت نشد.');
+    flashSet('danger', t('emails.not_found'));
     header('Location: index.php');
     exit;
 }

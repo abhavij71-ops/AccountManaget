@@ -16,7 +16,7 @@ if (!is_array($rawIds)) {
 $ids = array_values(array_unique(array_filter(array_map('intval', $rawIds), static fn ($v) => $v > 0)));
 
 if (!$ids) {
-    flashSet('danger', 'هیچ ایمیلی انتخاب نشده است.');
+    flashSet('danger', t('emails.no_emails_selected'));
     header('Location: index.php');
     exit;
 }
@@ -27,7 +27,7 @@ $stmt->execute($ids);
 $emails = $stmt->fetchAll();
 
 if (!$emails) {
-    flashSet('danger', 'ایمیل معتبری یافت نشد.');
+    flashSet('danger', t('emails.no_valid_emails'));
     header('Location: index.php');
     exit;
 }
@@ -38,7 +38,7 @@ $mode = ($_POST['mode'] ?? 'bulk') === 'individual' ? 'individual' : 'bulk';
 
 if (($_POST['action'] ?? '') === 'apply') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     } else {
         try {
             $pdo->beginTransaction();
@@ -48,10 +48,10 @@ if (($_POST['action'] ?? '') === 'apply') {
                 $newType = (string) ($_POST['bulk_type'] ?? '');
 
                 if ($newStatus !== '' && !array_key_exists($newStatus, EMAIL_STATUSES)) {
-                    $errors[] = 'وضعیت انتخاب‌شده نامعتبر است.';
+                    $errors[] = t('emails.invalid_status_selected');
                 }
                 if ($newType !== '' && !array_key_exists($newType, EMAIL_TYPES)) {
-                    $errors[] = 'نوع انتخاب‌شده نامعتبر است.';
+                    $errors[] = t('emails.invalid_type_selected');
                 }
 
                 if (!$errors) {
@@ -76,7 +76,7 @@ if (($_POST['action'] ?? '') === 'apply') {
                     $rowType = (string) ($typeInput[$id] ?? $email['type']);
 
                     if (!array_key_exists($rowStatus, EMAIL_STATUSES) || !array_key_exists($rowType, EMAIL_TYPES)) {
-                        $errors[] = 'مقدار انتخاب‌شده برای یکی از ایمیل‌ها نامعتبر است.';
+                        $errors[] = t('emails.invalid_row_value');
                         break;
                     }
                 }
@@ -103,7 +103,7 @@ if (($_POST['action'] ?? '') === 'apply') {
                 $pdo->rollBack();
             } else {
                 $pdo->commit();
-                flashSet('success', 'تغییرات با موفقیت روی ' . count($emails) . ' ایمیل اعمال شد.');
+                flashSet('success', t('emails.bulk_apply_success', ['count' => count($emails)]));
                 header('Location: index.php');
                 exit;
             }
@@ -111,18 +111,18 @@ if (($_POST['action'] ?? '') === 'apply') {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $errors[] = 'خطا در ذخیره تغییرات: ' . $e->getMessage();
+            $errors[] = t('msg.save_error') . $e->getMessage();
         }
     }
 }
 
 $csrf = csrfToken();
-$pageTitle = 'ویرایش سریع ایمیل‌ها';
+$pageTitle = t('emails.bulk_edit_title', ['count' => count($emails)]);
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 mb-0">ویرایش سریع ایمیل‌ها (<?= count($emails) ?> مورد انتخاب‌شده)</h1>
-    <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست</a>
+    <h1 class="h4 mb-0"><?= e(t('emails.bulk_edit_title', ['count' => count($emails)])) ?></h1>
+    <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
 </div>
 
 <?php if ($errors): ?>
@@ -135,7 +135,7 @@ require __DIR__ . '/../../includes/header.php';
 
 <div class="card am-card mb-3">
     <div class="card-body">
-        <div class="mb-2 fw-bold">ایمیل‌های انتخاب‌شده:</div>
+        <div class="mb-2 fw-bold"><?= e(t('emails.selected_emails_label')) ?></div>
         <ul class="mb-0">
             <?php foreach ($emails as $email): ?>
                 <li><?= e($email['email_address']) ?></li>
@@ -152,49 +152,49 @@ require __DIR__ . '/../../includes/header.php';
     <?php endforeach; ?>
 
     <div class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">روش ویرایش</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('emails.edit_method_title')) ?></div>
         <div class="card-body">
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="mode" id="mode-bulk" value="bulk" <?= $mode === 'bulk' ? 'checked' : '' ?>>
-                <label class="form-check-label" for="mode-bulk">یک مقدار مشترک برای همهٔ انتخاب‌شده‌ها</label>
+                <label class="form-check-label" for="mode-bulk"><?= e(t('emails.mode_shared_label')) ?></label>
             </div>
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="mode" id="mode-individual" value="individual" <?= $mode === 'individual' ? 'checked' : '' ?>>
-                <label class="form-check-label" for="mode-individual">ویرایش جداگانه هر ایمیل</label>
+                <label class="form-check-label" for="mode-individual"><?= e(t('emails.mode_individual_label')) ?></label>
             </div>
         </div>
     </div>
 
     <div id="panel-bulk" class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">مقدار مشترک</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('emails.shared_value_title')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-6">
-                <label class="form-label">وضعیت</label>
+                <label class="form-label"><?= e(t('common.field_status')) ?></label>
                 <select name="bulk_status" class="form-select">
-                    <option value="">— بدون تغییر —</option>
+                    <option value=""><?= e(t('emails.no_change_option')) ?></option>
                     <?= optionsHtml(EMAIL_STATUSES) ?>
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">نوع</label>
+                <label class="form-label"><?= e(t('common.field_type')) ?></label>
                 <select name="bulk_type" class="form-select">
-                    <option value="">— بدون تغییر —</option>
+                    <option value=""><?= e(t('emails.no_change_option')) ?></option>
                     <?= optionsHtml(EMAIL_TYPES) ?>
                 </select>
             </div>
-            <div class="col-12 text-muted small">فیلدهایی که «بدون تغییر» بمانند، برای هیچ‌کدام از ایمیل‌های انتخاب‌شده تغییر نمی‌کنند.</div>
+            <div class="col-12 text-muted small"><?= e(t('emails.no_change_hint')) ?></div>
         </div>
     </div>
 
     <div id="panel-individual" class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">ویرایش جداگانه</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('emails.individual_edit_title')) ?></div>
         <div class="table-responsive">
             <table class="table align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>آدرس ایمیل</th>
-                        <th style="width:220px;">وضعیت</th>
-                        <th style="width:220px;">نوع</th>
+                        <th><?= e(t('emails.th_address')) ?></th>
+                        <th style="width:220px;"><?= e(t('common.field_status')) ?></th>
+                        <th style="width:220px;"><?= e(t('common.field_type')) ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -218,8 +218,8 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary">اعمال تغییرات</button>
-    <a href="index.php" class="btn btn-outline-secondary">انصراف</a>
+    <button type="submit" class="btn btn-primary"><?= e(t('emails.apply_changes_button')) ?></button>
+    <a href="index.php" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
 </form>
 
 <script>

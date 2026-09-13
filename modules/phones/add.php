@@ -19,7 +19,7 @@ $form = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     }
 
     foreach (array_keys($form) as $key) {
@@ -31,10 +31,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $form['is_primary'] = isset($_POST['is_primary']) ? '1' : '';
 
     if ($form['phone_number'] === '') {
-        $errors[] = 'شماره تلفن الزامی است.';
+        $errors[] = t('phones.number_required');
     }
     if (!array_key_exists($form['status'], PHONE_STATUSES)) {
-        $errors[] = 'وضعیت نامعتبر است.';
+        $errors[] = t('phones.status_invalid');
     }
 
     if (!$errors) {
@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_history($pdo, 'phone', $newId, 'Phone Created');
 
             $pdo->commit();
-            flashSet('success', 'شماره تلفن با موفقیت ثبت شد.');
+            flashSet('success', t('phones.created_success'));
             header('Location: view.php?id=' . $newId);
             exit;
         } catch (Throwable $e) {
@@ -63,21 +63,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->rollBack();
             }
             if (str_contains($e->getMessage(), 'UNIQUE')) {
-                $errors[] = 'این شماره تلفن قبلاً ثبت شده است.';
+                $errors[] = t('phones.duplicate_number');
             } else {
-                $errors[] = 'خطا در ثبت شماره تلفن: ' . $e->getMessage();
+                $errors[] = t('phones.create_error') . $e->getMessage();
             }
         }
     }
 }
 
 $csrf = csrfToken();
-$pageTitle = 'افزودن شماره تلفن';
+$pageTitle = t('phones.add_title');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 mb-0">افزودن شماره تلفن</h1>
-    <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست</a>
+    <h1 class="h4 mb-0"><?= e(t('phones.add_title')) ?></h1>
+    <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
 </div>
 
 <?php if ($errors): ?>
@@ -93,34 +93,34 @@ require __DIR__ . '/../../includes/header.php';
     <div class="card am-card mb-3">
         <div class="card-body row g-3">
             <div class="col-md-6">
-                <label class="form-label">شماره تلفن *</label>
-                <input type="text" name="phone_number" class="form-control" required value="<?= e($form['phone_number']) ?>" placeholder="+98...">
+                <label class="form-label"><?= e(t('phones.field_number_required')) ?></label>
+                <input type="text" name="phone_number" class="form-control" required value="<?= e($form['phone_number']) ?>" placeholder="<?= e(t('phones.field_number_placeholder')) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">کشور</label>
+                <label class="form-label"><?= e(t('phones.field_country')) ?></label>
                 <input type="text" name="country" class="form-control" value="<?= e($form['country']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">برچسب (Label)</label>
-                <input type="text" name="label" class="form-control" value="<?= e($form['label']) ?>" placeholder="مثلاً شخصی، کاری">
+                <label class="form-label"><?= e(t('phones.field_label')) ?></label>
+                <input type="text" name="label" class="form-control" value="<?= e($form['label']) ?>" placeholder="<?= e(t('phones.field_label_placeholder')) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">وضعیت *</label>
+                <label class="form-label"><?= e(t('common.field_status_required')) ?></label>
                 <select name="status" class="form-select"><?= optionsHtml(PHONE_STATUSES, $form['status']) ?></select>
             </div>
             <div class="col-md-3 d-flex align-items-end">
                 <div class="form-check">
                     <input type="checkbox" name="is_primary" id="is_primary" class="form-check-input" value="1" <?= $form['is_primary'] === '1' ? 'checked' : '' ?>>
-                    <label for="is_primary" class="form-check-label">شماره اصلی (Primary)</label>
+                    <label for="is_primary" class="form-check-label"><?= e(t('phones.field_is_primary')) ?></label>
                 </div>
             </div>
             <div class="col-12">
-                <label class="form-label">یادداشت</label>
+                <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>
             </div>
         </div>
     </div>
-    <button type="submit" class="btn btn-primary">ذخیره شماره تلفن</button>
-    <a href="index.php" class="btn btn-outline-secondary">انصراف</a>
+    <button type="submit" class="btn btn-primary"><?= e(t('phones.save_button')) ?></button>
+    <a href="index.php" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
 </form>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

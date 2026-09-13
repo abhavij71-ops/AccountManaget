@@ -14,7 +14,7 @@ $stmt->execute([$id]);
 $service = $stmt->fetch();
 
 if (!$service) {
-    flashSet('danger', 'سرویس مورد نظر یافت نشد.');
+    flashSet('danger', t('services.not_found'));
     header('Location: index.php');
     exit;
 }
@@ -34,7 +34,7 @@ $categories = $pdo->query("SELECT DISTINCT category FROM services WHERE category
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     }
 
     foreach (array_keys($form) as $key) {
@@ -42,10 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($form['service_name'] === '') {
-        $errors[] = 'نام سرویس الزامی است.';
+        $errors[] = t('services.name_required');
     }
     if (!array_key_exists($form['status'], SERVICE_STATUSES)) {
-        $errors[] = 'وضعیت سرویس نامعتبر است.';
+        $errors[] = t('services.status_invalid');
     }
     if ($form['category'] === '') {
         $form['category'] = 'Not Set';
@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $pdo->commit();
-            flashSet('success', 'تغییرات با موفقیت ذخیره شد.');
+            flashSet('success', t('msg.saved_changes'));
             header('Location: view.php?id=' . $id);
             exit;
         } catch (Throwable $e) {
@@ -90,21 +90,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->rollBack();
             }
             if (str_contains($e->getMessage(), 'UNIQUE')) {
-                $errors[] = 'سرویسی با این نام قبلاً ثبت شده است.';
+                $errors[] = t('services.duplicate_name');
             } else {
-                $errors[] = 'خطا در ذخیره تغییرات: ' . $e->getMessage();
+                $errors[] = t('msg.save_error') . $e->getMessage();
             }
         }
     }
 }
 
 $csrf = csrfToken();
-$pageTitle = 'ویرایش سرویس';
+$pageTitle = t('services.edit_title_prefix') . $service['service_name'];
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 mb-0">ویرایش سرویس: <?= e($service['service_name']) ?></h1>
-    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary btn-sm">بازگشت به پروفایل</a>
+    <h1 class="h4 mb-0"><?= e(t('services.edit_title_prefix')) ?><?= e($service['service_name']) ?></h1>
+    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_profile')) ?></a>
 </div>
 
 <?php if ($errors): ?>
@@ -120,39 +120,39 @@ require __DIR__ . '/../../includes/header.php';
     <div class="card am-card mb-3">
         <div class="card-body row g-3">
             <div class="col-md-6">
-                <label class="form-label">نام سرویس *</label>
+                <label class="form-label"><?= e(t('services.field_name_required')) ?></label>
                 <input type="text" name="service_name" class="form-control" required value="<?= e($form['service_name']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">دسته‌بندی</label>
+                <label class="form-label"><?= e(t('services.field_category')) ?></label>
                 <input type="text" name="category" class="form-control" list="category-list" value="<?= e($form['category']) ?>">
                 <datalist id="category-list">
                     <?php foreach ($categories as $cat): ?><option value="<?= e($cat) ?>"><?php endforeach; ?>
                 </datalist>
             </div>
             <div class="col-md-6">
-                <label class="form-label">وب‌سایت</label>
+                <label class="form-label"><?= e(t('services.field_website')) ?></label>
                 <input type="url" name="website" class="form-control" value="<?= e($form['website']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">آدرس ورود (Login URL)</label>
+                <label class="form-label"><?= e(t('services.field_login_url')) ?></label>
                 <input type="url" name="login_url" class="form-control" value="<?= e($form['login_url']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">وضعیت *</label>
+                <label class="form-label"><?= e(t('common.field_status_required')) ?></label>
                 <select name="status" class="form-select"><?= optionsHtml(SERVICE_STATUSES, $form['status']) ?></select>
             </div>
             <div class="col-md-8">
-                <label class="form-label">هدف استفاده (Purpose)</label>
+                <label class="form-label"><?= e(t('services.field_purpose')) ?></label>
                 <input type="text" name="purpose" class="form-control" value="<?= e($form['purpose']) ?>">
             </div>
             <div class="col-12">
-                <label class="form-label">یادداشت</label>
+                <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>
             </div>
         </div>
     </div>
-    <button type="submit" class="btn btn-primary">ذخیره تغییرات</button>
-    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary">انصراف</a>
+    <button type="submit" class="btn btn-primary"><?= e(t('common.save_changes')) ?></button>
+    <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
 </form>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

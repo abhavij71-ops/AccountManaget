@@ -38,7 +38,7 @@ $allPhones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY ph
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        $errors[] = 'درخواست نامعتبر است. لطفاً دوباره تلاش کنید.';
+        $errors[] = t('msg.invalid_request');
     }
 
     foreach (array_keys($form) as $key) {
@@ -46,17 +46,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($form['email_address'] === '' || !filter_var($form['email_address'], FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'آدرس ایمیل معتبر وارد کنید.';
+        $errors[] = t('emails.email_invalid');
     }
     if (!array_key_exists($form['type'], EMAIL_TYPES)) {
-        $errors[] = 'نوع ایمیل نامعتبر است.';
+        $errors[] = t('emails.type_invalid');
     }
     if (!array_key_exists($form['status'], EMAIL_STATUSES)) {
-        $errors[] = 'وضعیت ایمیل نامعتبر است.';
+        $errors[] = t('emails.status_invalid');
     }
     foreach (['twofa_status', 'passkey_status', 'security_key_status', 'security_questions_status', 'recovery_codes_status'] as $secField) {
         if (!array_key_exists($form[$secField], SECURITY_STATES)) {
-            $errors[] = 'مقدار وضعیت امنیتی نامعتبر است.';
+            $errors[] = t('msg.invalid_security_status');
             break;
         }
     }
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_history($pdo, 'email', $emailId, 'Email Created');
 
             $pdo->commit();
-            flashSet('success', 'ایمیل با موفقیت ثبت شد.');
+            flashSet('success', t('emails.created_success'));
             header('Location: view.php?id=' . $emailId);
             exit;
         } catch (Throwable $e) {
@@ -107,21 +107,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->rollBack();
             }
             if (str_contains($e->getMessage(), 'UNIQUE')) {
-                $errors[] = 'این آدرس ایمیل قبلاً ثبت شده است.';
+                $errors[] = t('emails.duplicate_address');
             } else {
-                $errors[] = 'خطا در ثبت ایمیل: ' . $e->getMessage();
+                $errors[] = t('emails.create_error') . $e->getMessage();
             }
         }
     }
 }
 
 $csrf = csrfToken();
-$pageTitle = 'افزودن ایمیل';
+$pageTitle = t('emails.add_title');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 mb-0">افزودن ایمیل</h1>
-    <a href="index.php" class="btn btn-outline-secondary btn-sm">بازگشت به فهرست</a>
+    <h1 class="h4 mb-0"><?= e(t('emails.add_title')) ?></h1>
+    <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
 </div>
 
 <?php if ($errors): ?>
@@ -138,118 +138,118 @@ require __DIR__ . '/../../includes/header.php';
     <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
 
     <div class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">هویت</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('section.identity')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-6">
-                <label class="form-label">آدرس ایمیل *</label>
+                <label class="form-label"><?= e(t('emails.field_address_required')) ?></label>
                 <input type="email" name="email_address" class="form-control" required value="<?= e($form['email_address']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">نام نمایشی</label>
+                <label class="form-label"><?= e(t('common.field_display_name')) ?></label>
                 <input type="text" name="display_name" class="form-control" value="<?= e($form['display_name']) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">ارائه‌دهنده (Provider)</label>
-                <input type="text" name="provider" class="form-control" value="<?= e($form['provider']) ?>" placeholder="مثلاً Gmail, Outlook">
+                <label class="form-label"><?= e(t('emails.field_provider')) ?></label>
+                <input type="text" name="provider" class="form-control" value="<?= e($form['provider']) ?>" placeholder="<?= e(t('emails.field_provider_placeholder')) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">هدف استفاده (Purpose)</label>
+                <label class="form-label"><?= e(t('emails.field_purpose')) ?></label>
                 <input type="text" name="purpose" class="form-control" value="<?= e($form['purpose']) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">نوع *</label>
+                <label class="form-label"><?= e(t('emails.field_type_required')) ?></label>
                 <select name="type" class="form-select"><?= optionsHtml(EMAIL_TYPES, $form['type']) ?></select>
             </div>
             <div class="col-md-3">
-                <label class="form-label">وضعیت *</label>
+                <label class="form-label"><?= e(t('common.field_status_required')) ?></label>
                 <select name="status" class="form-select"><?= optionsHtml(EMAIL_STATUSES, $form['status']) ?></select>
             </div>
             <div class="col-md-3">
-                <label class="form-label">تاریخ ایجاد</label>
+                <label class="form-label"><?= e(t('common.field_created_date')) ?></label>
                 <input type="date" name="created_date" class="form-control" value="<?= e($form['created_date']) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">آخرین تأیید</label>
+                <label class="form-label"><?= e(t('common.field_last_verified')) ?></label>
                 <input type="date" name="last_verified" class="form-control" value="<?= e($form['last_verified']) ?>">
             </div>
             <div class="col-12">
-                <label class="form-label">یادداشت</label>
+                <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>
             </div>
         </div>
     </div>
 
     <div class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">امنیت ایمیل</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('emails.section_security')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label">تأیید دومرحله‌ای (2FA)</label>
+                <label class="form-label"><?= e(t('field.twofa')) ?></label>
                 <select name="twofa_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['twofa_status']) ?></select>
             </div>
             <div class="col-md-8">
-                <label class="form-label">روش 2FA</label>
-                <input type="text" name="twofa_method" class="form-control" value="<?= e($form['twofa_method']) ?>" placeholder="مثلاً Authenticator App, SMS">
+                <label class="form-label"><?= e(t('field.twofa_method')) ?></label>
+                <input type="text" name="twofa_method" class="form-control" value="<?= e($form['twofa_method']) ?>" placeholder="<?= e(t('field.twofa_method_placeholder')) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">Passkey</label>
+                <label class="form-label"><?= e(t('field.passkey')) ?></label>
                 <select name="passkey_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['passkey_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">کلید امنیتی (Security Key)</label>
+                <label class="form-label"><?= e(t('emails.field_security_key')) ?></label>
                 <select name="security_key_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['security_key_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">سوالات امنیتی</label>
+                <label class="form-label"><?= e(t('field.security_questions')) ?></label>
                 <select name="security_questions_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['security_questions_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">آخرین بررسی امنیتی</label>
+                <label class="form-label"><?= e(t('field.last_security_check')) ?></label>
                 <input type="date" name="last_security_check" class="form-control" value="<?= e($form['last_security_check']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label">روش بازیابی پشتیبان (Backup Method)</label>
+                <label class="form-label"><?= e(t('emails.field_backup_method')) ?></label>
                 <input type="text" name="backup_method" class="form-control" value="<?= e($form['backup_method']) ?>">
             </div>
         </div>
     </div>
 
     <div class="card am-card mb-3">
-        <div class="card-header bg-white fw-bold">بازیابی (Recovery)</div>
+        <div class="card-header bg-white fw-bold"><?= e(t('section.recovery')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-6">
-                <label class="form-label">ایمیل بازیابی</label>
+                <label class="form-label"><?= e(t('field.recovery_email')) ?></label>
                 <select name="recovery_email_id" class="form-select">
-                    <option value="">— انتخاب نشده —</option>
+                    <option value=""><?= e(t('common.none_selected')) ?></option>
                     <?php foreach ($otherEmails as $em): ?>
                         <option value="<?= (int) $em['id'] ?>" <?= $form['recovery_email_id'] === (string) $em['id'] ? 'selected' : '' ?>><?= e($em['email_address']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">شماره تلفن بازیابی</label>
+                <label class="form-label"><?= e(t('emails.field_recovery_phone')) ?></label>
                 <select name="recovery_phone_id" class="form-select">
-                    <option value="">— انتخاب نشده —</option>
+                    <option value=""><?= e(t('common.none_selected')) ?></option>
                     <?php foreach ($allPhones as $ph): ?>
                         <option value="<?= (int) $ph['id'] ?>" <?= $form['recovery_phone_id'] === (string) $ph['id'] ? 'selected' : '' ?>><?= e($ph['phone_number']) ?><?= $ph['label'] ? ' (' . e($ph['label']) . ')' : '' ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">وضعیت کدهای بازیابی</label>
+                <label class="form-label"><?= e(t('field.recovery_codes_status')) ?></label>
                 <select name="recovery_codes_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['recovery_codes_status']) ?></select>
             </div>
             <div class="col-md-8">
-                <label class="form-label">مرجع کدهای بازیابی</label>
-                <input type="text" name="recovery_codes_reference" class="form-control" value="<?= e($form['recovery_codes_reference']) ?>" placeholder="مثلاً محل نگهداری، نه خود کد">
+                <label class="form-label"><?= e(t('field.recovery_codes_reference')) ?></label>
+                <input type="text" name="recovery_codes_reference" class="form-control" value="<?= e($form['recovery_codes_reference']) ?>" placeholder="<?= e(t('emails.recovery_ref_placeholder')) ?>">
             </div>
             <div class="col-md-6">
-                <label class="form-label">آخرین تأیید بازیابی</label>
+                <label class="form-label"><?= e(t('field.last_recovery_verification')) ?></label>
                 <input type="date" name="last_recovery_verification" class="form-control" value="<?= e($form['last_recovery_verification']) ?>">
             </div>
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary">ذخیره ایمیل</button>
-    <a href="index.php" class="btn btn-outline-secondary">انصراف</a>
+    <button type="submit" class="btn btn-primary"><?= e(t('emails.save_button')) ?></button>
+    <a href="index.php" class="btn btn-outline-secondary"><?= e(t('common.cancel')) ?></a>
 </form>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>
