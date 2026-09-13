@@ -23,11 +23,26 @@ if ($statusFilter !== '' && array_key_exists($statusFilter, PHONE_STATUSES)) {
     $params['status'] = $statusFilter;
 }
 
+$filteredCountSql = 'SELECT COUNT(*) FROM phones';
+if ($where) {
+    $filteredCountSql .= ' WHERE ' . implode(' AND ', $where);
+}
+$filteredCountStmt = $pdo->prepare($filteredCountSql);
+$filteredCountStmt->execute($params);
+$filteredCount = (int) $filteredCountStmt->fetchColumn();
+
+$page = resolvePage($_GET['page'] ?? null);
+$perPage = resolvePerPage($_GET['per_page'] ?? null);
+[$page, $limit, $offset] = paginationBounds($filteredCount, $page, $perPage);
+
 $sql = 'SELECT * FROM phones';
 if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
 }
 $sql .= ' ORDER BY is_primary DESC, phone_number';
+if ($limit !== null) {
+    $sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+}
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -35,40 +50,40 @@ $phones = $stmt->fetchAll();
 
 $totalCount = (int) $pdo->query('SELECT COUNT(*) FROM phones')->fetchColumn();
 
-$pageTitle = 'شماره تلفن‌ها';
+$pageTitle = t('phones.title');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h1 class="h4 mb-0">شماره تلفن‌ها</h1>
-    <a href="add.php" class="btn btn-primary btn-sm">+ افزودن شماره تلفن</a>
+    <h1 class="h4 mb-0"><?= e(t('phones.title')) ?></h1>
+    <a href="add.php" class="btn btn-primary btn-sm"><?= e(t('phones.add')) ?></a>
 </div>
 
 <form method="get" class="row g-2 mb-3">
     <div class="col-md-6">
-        <input type="text" name="q" class="form-control" placeholder="جستجو در شماره، برچسب یا کشور..." value="<?= e($q) ?>">
+        <input type="text" name="q" class="form-control" placeholder="<?= e(t('phones.search_placeholder')) ?>" value="<?= e($q) ?>">
     </div>
     <div class="col-md-4">
         <select name="status" class="form-select">
-            <option value="">همه وضعیت‌ها</option>
+            <option value=""><?= e(t('common.all_statuses')) ?></option>
             <?= optionsHtml(PHONE_STATUSES, $statusFilter) ?>
         </select>
     </div>
     <div class="col-md-2">
-        <button type="submit" class="btn btn-outline-secondary w-100">فیلتر</button>
+        <button type="submit" class="btn btn-outline-secondary w-100"><?= e(t('common.filter')) ?></button>
     </div>
 </form>
 
 <?php if (!$totalCount): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-3">هیچ شماره تلفنی ثبت نشده است.</p>
-            <a href="add.php" class="btn btn-primary">افزودن اولین شماره تلفن</a>
+            <p class="text-muted mb-3"><?= e(t('phones.empty')) ?></p>
+            <a href="add.php" class="btn btn-primary"><?= e(t('phones.add_first')) ?></a>
         </div>
     </div>
 <?php elseif (!$phones): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-0">هیچ نتیجه‌ای برای این فیلتر یافت نشد.</p>
+            <p class="text-muted mb-0"><?= e(t('common.no_results')) ?></p>
         </div>
     </div>
 <?php else: ?>
@@ -77,11 +92,11 @@ require __DIR__ . '/../../includes/header.php';
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>شماره تلفن</th>
-                        <th>کشور</th>
-                        <th>برچسب</th>
-                        <th>وضعیت</th>
-                        <th>اصلی</th>
+                        <th><?= e(t('phones.th_number')) ?></th>
+                        <th><?= e(t('phones.th_country')) ?></th>
+                        <th><?= e(t('phones.th_label')) ?></th>
+                        <th><?= e(t('common.field_status')) ?></th>
+                        <th><?= e(t('phones.th_primary')) ?></th>
                         <th></th>
                     </tr>
                 </thead>
@@ -92,10 +107,10 @@ require __DIR__ . '/../../includes/header.php';
                         <td><?= dashOrValue($row['country']) ?></td>
                         <td><?= dashOrValue($row['label']) ?></td>
                         <td><?= renderBadge($row['status'], PHONE_STATUSES) ?></td>
-                        <td><?= ((int) $row['is_primary']) === 1 ? '<span class="badge badge-enabled">اصلی</span>' : '' ?></td>
+                        <td><?= ((int) $row['is_primary']) === 1 ? '<span class="badge badge-enabled">' . e(t('phones.th_primary')) . '</span>' : '' ?></td>
                         <td class="text-end">
-                            <a href="view.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-secondary">مشاهده</a>
-                            <a href="edit.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">ویرایش</a>
+                            <a href="view.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-secondary"><?= e(t('common.view')) ?></a>
+                            <a href="edit.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary"><?= e(t('common.edit')) ?></a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -103,6 +118,7 @@ require __DIR__ . '/../../includes/header.php';
             </table>
         </div>
     </div>
+    <?= renderPagination($filteredCount, $page, $perPage) ?>
 <?php endif; ?>
 
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

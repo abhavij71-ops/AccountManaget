@@ -2,6 +2,12 @@
 
 This project was built in sequential phases, each adding a coherent slice of functionality. Dates are omitted since this reflects build order, not a dated release history. Starting with v1.1.0, changes are tracked under semantic version numbers (`APP_VERSION` in `config.php`, shown in the sidebar and in Settings → درباره سیستم).
 
+## v1.2.0
+
+- **Add:** Pagination on the four main list pages (Emails, Services, Accounts, Phone Numbers) — page numbers with prev/next, and a records-per-page selector (10 / 25 / 50 / 100 / 250 / all). All existing filters and sort order are preserved across page/per-page changes. Implemented as shared helpers (`resolvePage`, `resolvePerPage`, `paginationBounds`, `renderPagination`) in `includes/helpers.php`.
+- **Add:** Multi-language scaffolding — a `t()` translation function (`includes/lang.php`), `lang/fa.php` and `lang/en.php` translation files, and a language switcher in the top bar that persists the choice in the session. Currently covers: the sidebar/nav, the four list pages touched by this release (titles, buttons, filters, table headers, empty states), all closed-enum status/type badges and dropdowns app-wide, and the history log labels. Per-page forms (Add/Edit/View for every module) are **not yet translated** — that is a larger follow-up pass, tracked below.
+- **Note:** the only bundled Bootstrap build is the RTL one (`assets/css/bootstrap.rtl.min.css`); English pages render `dir="ltr"` correctly (verified — Bootstrap 5's spacing utilities use CSS logical properties, so layout follows `dir` automatically), but a dedicated LTR-optimized visual pass has not been done.
+
 ## v1.1.0
 
 - **Fix:** `upsertEmailSecurity`/`upsertSubscription`/`upsertPayment`/`upsertAccountSecurity`/`upsertAccountRecovery` used `[...$data, 'x' => $y]` array spread, which throws `Cannot unpack array with string keys` on PHP versions before 8.1. Replaced with `array_merge()` so saving Email/Account edits works on the documented PHP 8.0 minimum.
@@ -46,3 +52,5 @@ Delete added for every entity (distinct from Archive and Unlink, with confirmati
 - TXT file import
 - Export (CSV/TXT) for Emails, Accounts, Services, Subscriptions, Security Reports
 - Reusable import templates
+- Full translation coverage of every Add/Edit/View page (v1.2.0 only translated the four list pages, shared nav, enum badges, and history labels)
+- A dedicated LTR Bootstrap build for a fully polished English layout

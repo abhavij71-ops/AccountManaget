@@ -29,11 +29,26 @@ if ($typeFilter !== '' && array_key_exists($typeFilter, EMAIL_TYPES)) {
     $params['type'] = $typeFilter;
 }
 
+$filteredCountSql = 'SELECT COUNT(*) FROM emails';
+if ($where) {
+    $filteredCountSql .= ' WHERE ' . implode(' AND ', $where);
+}
+$filteredCountStmt = $pdo->prepare($filteredCountSql);
+$filteredCountStmt->execute($params);
+$filteredCount = (int) $filteredCountStmt->fetchColumn();
+
+$page = resolvePage($_GET['page'] ?? null);
+$perPage = resolvePerPage($_GET['per_page'] ?? null);
+[$page, $limit, $offset] = paginationBounds($filteredCount, $page, $perPage);
+
 $sql = 'SELECT * FROM emails';
 if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
 }
 $sql .= ' ORDER BY is_favorite DESC, email_address';
+if ($limit !== null) {
+    $sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+}
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -45,52 +60,52 @@ $csrf = csrfToken();
 $queryString = $_SERVER['QUERY_STRING'] ?? '';
 $favoriteRedirect = 'index.php' . ($queryString !== '' ? '?' . $queryString : '');
 
-$pageTitle = 'ایمیل‌ها';
+$pageTitle = t('emails.title');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h1 class="h4 mb-0">ایمیل‌ها</h1>
-    <a href="add.php" class="btn btn-primary btn-sm">+ افزودن ایمیل</a>
+    <h1 class="h4 mb-0"><?= e(t('emails.title')) ?></h1>
+    <a href="add.php" class="btn btn-primary btn-sm"><?= e(t('emails.add')) ?></a>
 </div>
 
 <form method="get" class="row g-2 mb-3">
     <div class="col-md-5">
-        <input type="text" name="q" class="form-control" placeholder="جستجو در آدرس، نام یا ارائه‌دهنده..." value="<?= e($q) ?>">
+        <input type="text" name="q" class="form-control" placeholder="<?= e(t('emails.search_placeholder')) ?>" value="<?= e($q) ?>">
     </div>
     <div class="col-md-3">
         <select name="status" class="form-select">
-            <option value="">همه وضعیت‌ها</option>
+            <option value=""><?= e(t('common.all_statuses')) ?></option>
             <?= optionsHtml(EMAIL_STATUSES, $statusFilter) ?>
         </select>
     </div>
     <div class="col-md-3">
         <select name="type" class="form-select">
-            <option value="">همه انواع</option>
+            <option value=""><?= e(t('common.all_types')) ?></option>
             <?= optionsHtml(EMAIL_TYPES, $typeFilter) ?>
         </select>
     </div>
     <div class="col-md-1">
-        <button type="submit" class="btn btn-outline-secondary w-100">فیلتر</button>
+        <button type="submit" class="btn btn-outline-secondary w-100"><?= e(t('common.filter')) ?></button>
     </div>
 </form>
 
 <?php if (!$totalCount): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-3">هیچ ایمیلی ثبت نشده است.</p>
-            <a href="add.php" class="btn btn-primary">افزودن اولین ایمیل</a>
+            <p class="text-muted mb-3"><?= e(t('emails.empty')) ?></p>
+            <a href="add.php" class="btn btn-primary"><?= e(t('emails.add_first')) ?></a>
         </div>
     </div>
 <?php elseif (!$emails): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-0">هیچ نتیجه‌ای برای این فیلتر یافت نشد.</p>
+            <p class="text-muted mb-0"><?= e(t('common.no_results')) ?></p>
         </div>
     </div>
 <?php else: ?>
     <form id="bulk-select-form" method="post" action="bulk-edit.php" class="d-flex justify-content-end mb-2">
         <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-        <button type="submit" id="bulk-edit-submit" class="btn btn-outline-primary btn-sm">ویرایش سریع انتخاب‌شده‌ها</button>
+        <button type="submit" id="bulk-edit-submit" class="btn btn-outline-primary btn-sm"><?= e(t('emails.bulk_edit')) ?></button>
     </form>
 
     <div class="card am-card">
@@ -98,13 +113,13 @@ require __DIR__ . '/../../includes/header.php';
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th style="width:2rem;"><input type="checkbox" class="form-check-input" id="am-select-all" aria-label="انتخاب همه"></th>
+                        <th style="width:2rem;"><input type="checkbox" class="form-check-input" id="am-select-all" aria-label="<?= e(t('common.select_all')) ?>"></th>
                         <th style="width:2.5rem;"></th>
-                        <th>آدرس ایمیل</th>
-                        <th>نام نمایشی</th>
-                        <th>نوع</th>
-                        <th>وضعیت</th>
-                        <th>آخرین تأیید</th>
+                        <th><?= e(t('emails.th_address')) ?></th>
+                        <th><?= e(t('common.field_display_name')) ?></th>
+                        <th><?= e(t('common.field_type')) ?></th>
+                        <th><?= e(t('common.field_status')) ?></th>
+                        <th><?= e(t('common.field_last_verified')) ?></th>
                         <th></th>
                     </tr>
                 </thead>
@@ -113,7 +128,7 @@ require __DIR__ . '/../../includes/header.php';
                     <?php $isFavorite = (bool) $row['is_favorite']; ?>
                     <tr>
                         <td class="text-center">
-                            <input type="checkbox" class="form-check-input am-select-checkbox" name="ids[]" value="<?= (int) $row['id'] ?>" form="bulk-select-form" aria-label="انتخاب <?= e($row['email_address']) ?>">
+                            <input type="checkbox" class="form-check-input am-select-checkbox" name="ids[]" value="<?= (int) $row['id'] ?>" form="bulk-select-form" aria-label="<?= e($row['email_address']) ?>">
                         </td>
                         <td class="text-center">
                             <form method="post" action="toggle-favorite.php" class="am-favorite-form d-inline">
@@ -129,8 +144,8 @@ require __DIR__ . '/../../includes/header.php';
                         <td><?= renderBadge($row['status'], EMAIL_STATUSES) ?></td>
                         <td><?= dashOrValue($row['last_verified']) ?></td>
                         <td class="text-end">
-                            <a href="view.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-secondary">مشاهده</a>
-                            <a href="edit.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">ویرایش</a>
+                            <a href="view.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-secondary"><?= e(t('common.view')) ?></a>
+                            <a href="edit.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary"><?= e(t('common.edit')) ?></a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -138,6 +153,7 @@ require __DIR__ . '/../../includes/header.php';
             </table>
         </div>
     </div>
+    <?= renderPagination($filteredCount, $page, $perPage) ?>
 <?php endif; ?>
 
 <script>

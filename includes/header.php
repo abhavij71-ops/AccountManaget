@@ -2,27 +2,29 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/lang.php';
 requireLogin();
 
 $user = currentUser();
 
 $navItems = [
-    ['label' => 'داشبورد', 'href' => 'index.php', 'prefix' => 'index.php'],
-    ['label' => 'ایمیل‌ها', 'href' => 'modules/emails/index.php', 'prefix' => 'modules/emails/'],
-    ['label' => 'سرویس‌ها', 'href' => 'modules/services/index.php', 'prefix' => 'modules/services/'],
-    ['label' => 'اکانت‌ها', 'href' => 'modules/accounts/index.php', 'prefix' => 'modules/accounts/'],
-    ['label' => 'شماره تلفن‌ها', 'href' => 'modules/phones/index.php', 'prefix' => 'modules/phones/'],
-    ['label' => 'نیازمند بررسی', 'href' => 'needs-attention.php', 'prefix' => 'needs-attention.php'],
-    ['label' => 'جستجو', 'href' => 'search.php', 'prefix' => 'search.php'],
-    ['label' => 'ورود / خروجی اطلاعات', 'href' => 'import-export.php', 'prefix' => ['import-export.php', 'modules/import/']],
-    ['label' => 'تنظیمات', 'href' => 'settings.php', 'prefix' => 'settings.php'],
+    ['label' => t('nav.dashboard'), 'href' => 'index.php', 'prefix' => 'index.php'],
+    ['label' => t('nav.emails'), 'href' => 'modules/emails/index.php', 'prefix' => 'modules/emails/'],
+    ['label' => t('nav.services'), 'href' => 'modules/services/index.php', 'prefix' => 'modules/services/'],
+    ['label' => t('nav.accounts'), 'href' => 'modules/accounts/index.php', 'prefix' => 'modules/accounts/'],
+    ['label' => t('nav.phones'), 'href' => 'modules/phones/index.php', 'prefix' => 'modules/phones/'],
+    ['label' => t('nav.needs_attention'), 'href' => 'needs-attention.php', 'prefix' => 'needs-attention.php'],
+    ['label' => t('nav.search'), 'href' => 'search.php', 'prefix' => 'search.php'],
+    ['label' => t('nav.import_export'), 'href' => 'import-export.php', 'prefix' => ['import-export.php', 'modules/import/']],
+    ['label' => t('nav.settings'), 'href' => 'settings.php', 'prefix' => 'settings.php'],
 ];
 
 $relativeScriptPath = ltrim(substr((string) ($_SERVER['SCRIPT_NAME'] ?? ''), strlen(APP_BASE_URL)), '/');
+$currentRelativeUrl = $relativeScriptPath . (($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
 $flash = function_exists('flashGet') ? flashGet() : null;
 ?>
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="<?= e(currentLanguage()) ?>" dir="<?= e(currentTextDirection()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -52,12 +54,18 @@ $flash = function_exists('flashGet') ? flashGet() : null;
     <div class="flex-grow-1">
         <header class="am-topbar d-flex align-items-center justify-content-between px-4 py-2">
             <button class="btn btn-outline-secondary d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#am-mobile-nav">
-                منو
+                <?= e(t('nav.menu')) ?>
             </button>
             <div class="ms-auto d-flex align-items-center gap-3">
+                <div class="am-lang-switch d-flex align-items-center gap-1">
+                    <?php foreach (SUPPORTED_LANGUAGES as $code => $label): ?>
+                        <a href="<?= e(appUrl('set-language.php?lang=' . $code . '&redirect=' . urlencode($currentRelativeUrl))) ?>"
+                           class="badge text-decoration-none <?= currentLanguage() === $code ? 'text-bg-primary' : 'text-bg-light border' ?>"><?= e($label) ?></a>
+                    <?php endforeach; ?>
+                </div>
                 <?php if ($user): ?>
                     <span class="text-muted"><?= e($user['full_name'] ?: $user['username']) ?></span>
-                    <a href="<?= e(appUrl('logout.php')) ?>" class="btn btn-sm btn-outline-danger">خروج</a>
+                    <a href="<?= e(appUrl('logout.php')) ?>" class="btn btn-sm btn-outline-danger"><?= e(t('nav.logout')) ?></a>
                 <?php endif; ?>
             </div>
         </header>

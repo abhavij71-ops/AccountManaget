@@ -28,11 +28,26 @@ if ($categoryFilter !== '') {
     $params['category'] = $categoryFilter;
 }
 
+$filteredCountSql = 'SELECT COUNT(*) FROM services';
+if ($where) {
+    $filteredCountSql .= ' WHERE ' . implode(' AND ', $where);
+}
+$filteredCountStmt = $pdo->prepare($filteredCountSql);
+$filteredCountStmt->execute($params);
+$filteredCount = (int) $filteredCountStmt->fetchColumn();
+
+$page = resolvePage($_GET['page'] ?? null);
+$perPage = resolvePerPage($_GET['per_page'] ?? null);
+[$page, $limit, $offset] = paginationBounds($filteredCount, $page, $perPage);
+
 $sql = 'SELECT * FROM services';
 if ($where) {
     $sql .= ' WHERE ' . implode(' AND ', $where);
 }
 $sql .= ' ORDER BY service_name';
+if ($limit !== null) {
+    $sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+}
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -41,48 +56,48 @@ $services = $stmt->fetchAll();
 $totalCount = (int) $pdo->query('SELECT COUNT(*) FROM services')->fetchColumn();
 $categories = $pdo->query("SELECT DISTINCT category FROM services WHERE category != 'Not Set' ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
 
-$pageTitle = 'سرویس‌ها';
+$pageTitle = t('services.title');
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h1 class="h4 mb-0">سرویس‌ها</h1>
-    <a href="add.php" class="btn btn-primary btn-sm">+ افزودن سرویس</a>
+    <h1 class="h4 mb-0"><?= e(t('services.title')) ?></h1>
+    <a href="add.php" class="btn btn-primary btn-sm"><?= e(t('services.add')) ?></a>
 </div>
 
 <form method="get" class="row g-2 mb-3">
     <div class="col-md-5">
-        <input type="text" name="q" class="form-control" placeholder="جستجو در نام یا وب‌سایت..." value="<?= e($q) ?>">
+        <input type="text" name="q" class="form-control" placeholder="<?= e(t('services.search_placeholder')) ?>" value="<?= e($q) ?>">
     </div>
     <div class="col-md-3">
         <select name="status" class="form-select">
-            <option value="">همه وضعیت‌ها</option>
+            <option value=""><?= e(t('common.all_statuses')) ?></option>
             <?= optionsHtml(SERVICE_STATUSES, $statusFilter) ?>
         </select>
     </div>
     <div class="col-md-3">
         <select name="category" class="form-select">
-            <option value="">همه دسته‌ها</option>
+            <option value=""><?= e(t('services.all_categories')) ?></option>
             <?php foreach ($categories as $cat): ?>
                 <option value="<?= e($cat) ?>" <?= $categoryFilter === $cat ? 'selected' : '' ?>><?= e($cat) ?></option>
             <?php endforeach; ?>
         </select>
     </div>
     <div class="col-md-1">
-        <button type="submit" class="btn btn-outline-secondary w-100">فیلتر</button>
+        <button type="submit" class="btn btn-outline-secondary w-100"><?= e(t('common.filter')) ?></button>
     </div>
 </form>
 
 <?php if (!$totalCount): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-3">هیچ سرویسی ثبت نشده است.</p>
-            <a href="add.php" class="btn btn-primary">افزودن اولین سرویس</a>
+            <p class="text-muted mb-3"><?= e(t('services.empty')) ?></p>
+            <a href="add.php" class="btn btn-primary"><?= e(t('services.add_first')) ?></a>
         </div>
     </div>
 <?php elseif (!$services): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
-            <p class="text-muted mb-0">هیچ نتیجه‌ای برای این فیلتر یافت نشد.</p>
+            <p class="text-muted mb-0"><?= e(t('common.no_results')) ?></p>
         </div>
     </div>
 <?php else: ?>
@@ -91,10 +106,10 @@ require __DIR__ . '/../../includes/header.php';
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>نام سرویس</th>
-                        <th>دسته‌بندی</th>
-                        <th>وب‌سایت</th>
-                        <th>وضعیت</th>
+                        <th><?= e(t('services.th_name')) ?></th>
+                        <th><?= e(t('services.th_category')) ?></th>
+                        <th><?= e(t('services.th_website')) ?></th>
+                        <th><?= e(t('common.field_status')) ?></th>
                         <th></th>
                     </tr>
                 </thead>
@@ -106,8 +121,8 @@ require __DIR__ . '/../../includes/header.php';
                         <td><?= dashOrValue($row['website']) ?></td>
                         <td><?= renderBadge($row['status'], SERVICE_STATUSES) ?></td>
                         <td class="text-end">
-                            <a href="view.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-secondary">مشاهده</a>
-                            <a href="edit.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary">ویرایش</a>
+                            <a href="view.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-secondary"><?= e(t('common.view')) ?></a>
+                            <a href="edit.php?id=<?= (int) $row['id'] ?>" class="btn btn-sm btn-outline-primary"><?= e(t('common.edit')) ?></a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -115,6 +130,7 @@ require __DIR__ . '/../../includes/header.php';
             </table>
         </div>
     </div>
+    <?= renderPagination($filteredCount, $page, $perPage) ?>
 <?php endif; ?>
 
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

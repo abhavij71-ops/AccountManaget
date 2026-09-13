@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/lang.php';
+
 const EMAIL_TYPES = [
     'Personal' => 'شخصی',
     'Work' => 'کاری',
@@ -134,10 +136,23 @@ function badgeClassFor(string $value): string
     };
 }
 
+/**
+ * Resolves the display label for a closed-enum DB value: prefers the
+ * active language's 'enum.<value>' translation, falling back to the
+ * Persian label baked into the constant maps above (and finally the
+ * raw value itself) so untranslated values never disappear.
+ */
+function enumLabel(string $value, array $fallbackMap = []): string
+{
+    $key = 'enum.' . $value;
+    $translated = t($key);
+    return $translated !== $key ? $translated : ($fallbackMap[$value] ?? $value);
+}
+
 function renderBadge(?string $value, array $labelMap = []): string
 {
     $value = ($value === null || $value === '') ? 'Not Set' : $value;
-    $label = $labelMap[$value] ?? $value;
+    $label = enumLabel($value, $labelMap);
     return '<span class="badge ' . badgeClassFor($value) . '">' . e($label) . '</span>';
 }
 
@@ -145,6 +160,7 @@ function optionsHtml(array $map, ?string $selected = null): string
 {
     $html = '';
     foreach ($map as $value => $label) {
+        $label = enumLabel($value, $map);
         $sel = ($selected === $value) ? ' selected' : '';
         $html .= '<option value="' . e($value) . '"' . $sel . '>' . e($label) . '</option>';
     }
@@ -195,7 +211,9 @@ function log_history(
 
 function historyActionLabel(string $action): string
 {
-    return HISTORY_ACTION_LABELS[$action] ?? $action;
+    $key = 'history.' . $action;
+    $translated = t($key);
+    return $translated !== $key ? $translated : (HISTORY_ACTION_LABELS[$action] ?? $action);
 }
 
 function fetchEntityTags(PDO $pdo, string $entityType, int $entityId): array
@@ -272,4 +290,109 @@ function entityDisplayLabel(PDO $pdo, string $entityType, int $entityId): ?strin
     $stmt->execute([$entityId]);
     $label = $stmt->fetchColumn();
     return $label !== false ? (string) $label : null;
+}
+
+const PAGINATION_PER_PAGE_OPTIONS = [10, 25, 50, 100, 250];
+const PAGINATION_DEFAULT_PER_PAGE = 25;
+
+/** @return int|'all' */
+function resolvePerPage(?string $raw)
+{
+    if ($raw === 'all') {
+        return 'all';
+    }
+    $n = (int) $raw;
+    return in_array($n, PAGINATION_PER_PAGE_OPTIONS, true) ? $n : PAGINATION_DEFAULT_PER_PAGE;
+}
+
+function resolvePage(?string $raw): int
+{
+    $n = (int) $raw;
+    return $n > 0 ? $n : 1;
+}
+
+/**
+ * Clamps the requested page against the real page count and returns
+ * [$page, $limit, $offset] — $limit is null when $perPage is 'all' (no LIMIT clause).
+ *
+ * @param int|'all' $perPage
+ * @return array{0:int,1:?int,2:int}
+ */
+function paginationBounds(int $totalCount, int $page, $perPage): array
+{
+    if ($perPage === 'all') {
+        return [1, null, 0];
+    }
+    $totalPages = max(1, (int) ceil($totalCount / $perPage));
+    $page = min(max(1, $page), $totalPages);
+    return [$page, $perPage, ($page - 1) * $perPage];
+}
+
+function pageUrl(array $overrides): string
+{
+    $params = array_merge($_GET, $overrides);
+    return '?' . e(http_build_query($params));
+}
+
+/** @param int|'all' $perPage */
+function renderPagination(int $totalCount, int $page, $perPage): string
+{
+    $totalPages = $perPage === 'all' ? 1 : max(1, (int) ceil($totalCount / $perPage));
+
+    $html = '<div class="am-pagination d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">';
+
+    $html .= '<form method="get" class="d-flex align-items-center gap-2">';
+    foreach ($_GET as $key => $value) {
+        if ($key === 'per_page' || $key === 'page') {
+            continue;
+        }
+        foreach ((array) $value as $v) {
+            $name = is_array($value) ? $key . '[]' : $key;
+            $html .= '<input type="hidden" name="' . e($name) . '" value="' . e((string) $v) . '">';
+        }
+    }
+    $html .= '<label class="text-muted small mb-0">' . t('pagination.show') . '</label>';
+    $html .= '<select name="per_page" class="form-select form-select-sm w-auto" onchange="this.form.submit()">';
+    foreach (PAGINATION_PER_PAGE_OPTIONS as $opt) {
+        $html .= '<option value="' . $opt . '" ' . ($perPage === $opt ? 'selected' : '') . '>' . $opt . '</option>';
+    }
+    $html .= '<option value="all" ' . ($perPage === 'all' ? 'selected' : '') . '>' . t('pagination.all') . '</option>';
+    $html .= '</select>';
+    $html .= '<span class="text-muted small">' . t('pagination.of_records', ['count' => $totalCount]) . '</span>';
+    $html .= '</form>';
+
+    if ($totalPages > 1) {
+        $html .= '<nav aria-label="pagination"><ul class="pagination pagination-sm mb-0">';
+
+        $prevDisabled = $page <= 1 ? ' disabled' : '';
+        $html .= '<li class="page-item' . $prevDisabled . '"><a class="page-link" href="' . pageUrl(['page' => max(1, $page - 1)]) . '">' . t('pagination.prev') . '</a></li>';
+
+        $start = max(1, $page - 2);
+        $end = min($totalPages, $page + 2);
+
+        if ($start > 1) {
+            $html .= '<li class="page-item"><a class="page-link" href="' . pageUrl(['page' => 1]) . '">1</a></li>';
+            if ($start > 2) {
+                $html .= '<li class="page-item disabled"><span class="page-link">…</span></li>';
+            }
+        }
+        for ($p = $start; $p <= $end; $p++) {
+            $active = $p === $page ? ' active' : '';
+            $html .= '<li class="page-item' . $active . '"><a class="page-link" href="' . pageUrl(['page' => $p]) . '">' . $p . '</a></li>';
+        }
+        if ($end < $totalPages) {
+            if ($end < $totalPages - 1) {
+                $html .= '<li class="page-item disabled"><span class="page-link">…</span></li>';
+            }
+            $html .= '<li class="page-item"><a class="page-link" href="' . pageUrl(['page' => $totalPages]) . '">' . $totalPages . '</a></li>';
+        }
+
+        $nextDisabled = $page >= $totalPages ? ' disabled' : '';
+        $html .= '<li class="page-item' . $nextDisabled . '"><a class="page-link" href="' . pageUrl(['page' => min($totalPages, $page + 1)]) . '">' . t('pagination.next') . '</a></li>';
+
+        $html .= '</ul></nav>';
+    }
+
+    $html .= '</div>';
+    return $html;
 }

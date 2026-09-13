@@ -160,3 +160,8 @@ main.am-content {
 .am-favorite-btn.is-favorite {
     color: #f5b301;
 }
+
+.am-lang-switch a {
+    padding: 0.3rem 0.55rem;
+    cursor: pointer;
+}
