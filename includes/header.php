@@ -22,6 +22,7 @@ $navItems = [
 $relativeScriptPath = ltrim(substr((string) ($_SERVER['SCRIPT_NAME'] ?? ''), strlen(APP_BASE_URL)), '/');
 $currentRelativeUrl = $relativeScriptPath . (($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
 $flash = function_exists('flashGet') ? flashGet() : null;
+$bs = currentTextDirection() === 'rtl' ? 'bootstrap.rtl.min.css' : 'bootstrap.min.css';
 ?>
 <!DOCTYPE html>
 <html lang="<?= e(currentLanguage()) ?>" dir="<?= e(currentTextDirection()) ?>">
@@ -29,7 +30,7 @@ $flash = function_exists('flashGet') ? flashGet() : null;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= isset($pageTitle) ? e($pageTitle) . ' | ' . e(APP_NAME) : e(APP_NAME) ?></title>
-    <link rel="stylesheet" href="<?= e(appUrl('assets/css/bootstrap.rtl.min.css')) ?>">
+    <link rel="stylesheet" href="<?= e(appUrl('assets/css/' . $bs)) ?>">
     <link rel="stylesheet" href="<?= e(appUrl('assets/css/app.css')) ?>">
 </head>
 <body>
@@ -58,7 +59,7 @@ $flash = function_exists('flashGet') ? flashGet() : null;
             </button>
             <div class="ms-auto d-flex align-items-center gap-3">
                 <div class="am-lang-switch d-flex align-items-center gap-1">
-                    <?php foreach (SUPPORTED_LANGUAGES as $code => $label): ?>
+                    <?php foreach (supportedLanguages() as $code => $label): ?>
                         <a href="<?= e(appUrl('set-language.php?lang=' . $code . '&redirect=' . urlencode($currentRelativeUrl))) ?>"
                            class="badge text-decoration-none <?= currentLanguage() === $code ? 'text-bg-primary' : 'text-bg-light border' ?>"><?= e($label) ?></a>
                     <?php endforeach; ?>
