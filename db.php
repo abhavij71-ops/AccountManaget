@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/lang.php';
 
 function db(): PDO
 {
@@ -24,7 +25,7 @@ function db(): PDO
         applySchemaUpgrades($pdo);
     } catch (PDOException $e) {
         http_response_code(500);
-        die('خطا در اتصال به دیتابیس: ' . $e->getMessage());
+        die(t('db.connection_error', ['error' => $e->getMessage()]));
     }
 
     return $pdo;

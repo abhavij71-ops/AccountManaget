@@ -598,4 +598,8 @@ return [
     'emails.no_change_hint' => 'فیلدهایی که «بدون تغییر» بمانند، برای هیچ‌کدام از ایمیل‌های انتخاب‌شده تغییر نمی‌کنند.',
     'emails.individual_edit_title' => 'ویرایش جداگانه',
     'emails.apply_changes_button' => 'اعمال تغییرات',
+
+    'db.connection_error' => 'خطا در اتصال به دیتابیس: :error',
+
+    'common.list_separator' => '، ',
 ];

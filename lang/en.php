@@ -598,4 +598,8 @@ return [
     'emails.no_change_hint' => 'Fields left as "No change" will not be modified on any of the selected emails.',
     'emails.individual_edit_title' => 'Individual edit',
     'emails.apply_changes_button' => 'Apply changes',
+
+    'db.connection_error' => 'Database connection error: :error',
+
+    'common.list_separator' => ', ',
 ];
