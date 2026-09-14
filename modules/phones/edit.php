@@ -19,6 +19,10 @@ if (!$phone) {
     exit;
 }
 
+$stmt = $pdo->prepare('SELECT * FROM phone_security WHERE phone_id = ?');
+$stmt->execute([$id]);
+$phoneSecurity = $stmt->fetch() ?: [];
+
 $errors = [];
 $form = [
     'phone_number' => $phone['phone_number'],
@@ -27,6 +31,11 @@ $form = [
     'status' => $phone['status'],
     'is_primary' => ((int) $phone['is_primary']) === 1 ? '1' : '',
     'notes' => (string) ($phone['notes'] ?? ''),
+    'sim_pin_status' => $phoneSecurity['sim_pin_status'] ?? 'Not Set',
+    'port_out_lock' => $phoneSecurity['port_out_lock'] ?? 'Not Set',
+    'carrier' => (string) ($phoneSecurity['carrier'] ?? ''),
+    'esim' => isset($phoneSecurity['esim']) && $phoneSecurity['esim'] !== null ? (string) (int) $phoneSecurity['esim'] : '',
+    'last_security_check' => (string) ($phoneSecurity['last_security_check'] ?? ''),
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -47,6 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!array_key_exists($form['status'], PHONE_STATUSES)) {
         $errors[] = t('phones.status_invalid');
+    }
+    foreach (['sim_pin_status', 'port_out_lock'] as $f) {
+        if (!array_key_exists($form[$f], SECURITY_STATES)) {
+            $errors[] = t('msg.invalid_security_status');
+            break;
+        }
     }
 
     if (!$errors) {
@@ -82,6 +97,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
                 'id' => $id,
             ]);
+
+            $securityParams = [
+                'phone_id' => $id,
+                'sim_pin_status' => $form['sim_pin_status'],
+                'port_out_lock' => $form['port_out_lock'],
+                'carrier' => $form['carrier'] !== '' ? $form['carrier'] : null,
+                'esim' => $form['esim'] !== '' ? (int) $form['esim'] : null,
+                'last_security_check' => $form['last_security_check'] !== '' ? $form['last_security_check'] : null,
+            ];
+            if ($phoneSecurity) {
+                $stmt = $pdo->prepare('UPDATE phone_security SET
+                    sim_pin_status = :sim_pin_status, port_out_lock = :port_out_lock, carrier = :carrier,
+                    esim = :esim, last_security_check = :last_security_check
+                    WHERE phone_id = :phone_id');
+            } else {
+                $stmt = $pdo->prepare('INSERT INTO phone_security (phone_id, sim_pin_status, port_out_lock, carrier, esim, last_security_check)
+                    VALUES (:phone_id, :sim_pin_status, :port_out_lock, :carrier, :esim, :last_security_check)');
+            }
+            $stmt->execute($securityParams);
 
             $pdo->commit();
             flashSet('success', t('msg.saved_changes'));
@@ -146,6 +180,36 @@ require __DIR__ . '/../../includes/header.php';
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="card am-card mb-3">
+        <div class="card-header bg-white fw-bold"><?= e(t('phones.security_heading')) ?></div>
+        <div class="card-body row g-3">
+            <div class="col-md-4">
+                <label class="form-label"><?= e(t('phones.field_sim_pin_status')) ?></label>
+                <select name="sim_pin_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['sim_pin_status']) ?></select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label"><?= e(t('phones.field_port_out_lock')) ?></label>
+                <select name="port_out_lock" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['port_out_lock']) ?></select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label"><?= e(t('phones.field_carrier')) ?></label>
+                <input type="text" name="carrier" class="form-control" value="<?= e($form['carrier']) ?>">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label"><?= e(t('phones.field_esim')) ?></label>
+                <select name="esim" class="form-select">
+                    <option value="" <?= $form['esim'] === '' ? 'selected' : '' ?>><?= e(t('enum.Unknown')) ?></option>
+                    <option value="1" <?= $form['esim'] === '1' ? 'selected' : '' ?>><?= e(t('common.yes')) ?></option>
+                    <option value="0" <?= $form['esim'] === '0' ? 'selected' : '' ?>><?= e(t('common.no')) ?></option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label"><?= e(t('field.last_security_check')) ?></label>
+                <input type="date" name="last_security_check" class="form-control" value="<?= e($form['last_security_check']) ?>">
             </div>
         </div>
     </div>

@@ -2,6 +2,15 @@
 
 This project was built in sequential phases, each adding a coherent slice of functionality. Dates are omitted since this reflects build order, not a dated release history. Starting with v1.1.0, changes are tracked under semantic version numbers (`APP_VERSION` in `config.php`, shown in the sidebar and in Settings → درباره سیستم).
 
+## v1.5.0
+
+- **Add:** Identity Anchor model for Accounts (see `docs/IDENTITY-MODEL.md`) — an Account is no longer required to have an Email. `accounts.email_id` is now nullable, and two columns were added: `identity_type` (`email` / `phone` / `username` / `other`) and `identity_phone_id` (references `phones`), with a table-level `CHECK` ensuring the field matching the chosen identity type is actually filled in. Existing accounts are migrated to `identity_type = 'email'` automatically (SQLite can't add a `CHECK` via `ALTER TABLE`, so the migration rebuilds the table via rename → create → copy → drop, guarded to run once, with `data/database.sqlite` backed up to `.bak` first).
+- **Add:** Add/Edit/Quick-add account forms gained an "Identity type" selector at the top, with the Email or Phone field shown or hidden inline (no JS library) depending on the choice, and matching server-side validation.
+- **Add:** The Accounts list's Email column is now an Identity column (with its own filter dropdown), and the Account profile header links to whichever Email or Phone actually anchors that account instead of assuming Email.
+- **Add:** Phone profile gained "Accounts created with this number" — accounts anchored to that phone via `identity_phone_id` — kept entirely separate from the pre-existing phone↔account link-list section.
+- **Add:** Phone Security (`docs/IDENTITY-MODEL.md` sec. 5) — a new `phone_security` table (SIM PIN status, port-out lock, carrier, eSIM, last security check, security score; both statuses five-state) with a guarded migration, a `calcPhoneSecurityScore()` mirroring the existing email security score function, and a matching security section on the Phone view/edit pages.
+- **Add:** New translation keys for all of the above across `lang/en.php`, `lang/fa.php`, and `lang/ar.php`.
+
 ## v1.4.0
 
 - **Add:** Arabic translation (`lang/ar.php`) — full coverage, same 568 keys as `lang/en.php`, `dir` set to `rtl`.

@@ -133,6 +133,14 @@ if (!empty($recovery['recovery_phone_id'])) {
     $recoveryPhone = $stmt->fetch() ?: null;
 }
 
+$identityType = $account['identity_type'] ?? 'email';
+$identityPhone = null;
+if (!empty($account['identity_phone_id'])) {
+    $stmt = $pdo->prepare('SELECT id, phone_number, label FROM phones WHERE id = ?');
+    $stmt->execute([$account['identity_phone_id']]);
+    $identityPhone = $stmt->fetch() ?: null;
+}
+
 $subscription = fetchSubscription($pdo, $id);
 $payment = fetchPayment($pdo, $id);
 $subType = $subscription['type'] ?? 'Unknown';
@@ -178,7 +186,22 @@ require __DIR__ . '/../../includes/header.php';
         <div class="d-flex gap-2 flex-wrap align-items-center">
             <?= renderBadge($account['status'], ACCOUNT_STATUSES) ?>
             <?= renderBadge($account['account_type'], ACCOUNT_TYPES) ?>
-            <a href="../emails/view.php?id=<?= (int) $account['email_id'] ?>" class="small"><?= e($account['email_address']) ?></a>
+            <span class="text-muted small"><?= e(t('accounts.identity_label')) ?>:</span>
+            <?php if ($identityType === 'phone'): ?>
+                <?php if ($identityPhone): ?>
+                    <a href="../phones/view.php?id=<?= (int) $identityPhone['id'] ?>" class="small"><?= e($identityPhone['phone_number']) ?></a>
+                <?php else: ?>
+                    <span class="small text-muted">—</span>
+                <?php endif; ?>
+            <?php elseif ($identityType === 'username'): ?>
+                <span class="small"><?= e($account['username'] ?: '—') ?></span>
+            <?php elseif ($identityType === 'other'): ?>
+                <span class="small text-muted"><?= e(t('accounts.identity_type_other')) ?></span>
+            <?php elseif (!empty($account['email_id'])): ?>
+                <a href="../emails/view.php?id=<?= (int) $account['email_id'] ?>" class="small"><?= e($account['email_address']) ?></a>
+            <?php else: ?>
+                <span class="small text-muted">—</span>
+            <?php endif; ?>
         </div>
     </div>
     <div class="text-end">

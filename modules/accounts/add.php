@@ -11,7 +11,9 @@ $pdo = db();
 $errors = [];
 $form = [
     'service_id' => '',
+    'identity_type' => 'email',
     'email_id' => '',
+    'identity_phone_id' => '',
     'username' => '',
     'display_name' => '',
     'external_account_id' => '',
@@ -76,12 +78,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $serviceId = (int) $form['service_id'];
     $emailId = (int) $form['email_id'];
+    $identityPhoneId = (int) $form['identity_phone_id'];
 
     if (!in_array($serviceId, array_column($services, 'id'), true)) {
         $errors[] = t('accounts.service_required');
     }
-    if (!in_array($emailId, array_column($emails, 'id'), true)) {
-        $errors[] = t('accounts.email_required');
+    if (!in_array($form['identity_type'], ['email', 'phone', 'username', 'other'], true)) {
+        $errors[] = t('accounts.identity_type_invalid');
+    } elseif ($form['identity_type'] === 'email') {
+        if (!in_array($emailId, array_column($emails, 'id'), true)) {
+            $errors[] = t('accounts.email_required');
+        }
+    } elseif ($form['identity_type'] === 'phone') {
+        if (!in_array($identityPhoneId, array_column($phones, 'id'), true)) {
+            $errors[] = t('accounts.identity_phone_required');
+        }
+    } elseif ($form['identity_type'] === 'username' && $form['username'] === '') {
+        $errors[] = t('accounts.identity_username_required');
     }
     if (!array_key_exists($form['status'], ACCOUNT_STATUSES)) {
         $errors[] = t('accounts.status_invalid');
@@ -122,13 +135,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             $stmt = $pdo->prepare('INSERT INTO accounts
-                (service_id, email_id, username, display_name, external_account_id, account_url, login_url,
+                (service_id, email_id, identity_type, identity_phone_id, username, display_name, external_account_id, account_url, login_url,
                  status, account_type, created_date, last_login, last_verified, notes)
-                VALUES (:service_id, :email_id, :username, :display_name, :external_account_id, :account_url, :login_url,
+                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :username, :display_name, :external_account_id, :account_url, :login_url,
                  :status, :account_type, :created_date, :last_login, :last_verified, :notes)');
             $stmt->execute([
                 'service_id' => $serviceId,
-                'email_id' => $emailId,
+                'email_id' => $emailId !== 0 ? $emailId : null,
+                'identity_type' => $form['identity_type'],
+                'identity_phone_id' => $identityPhoneId !== 0 ? $identityPhoneId : null,
                 'username' => $form['username'] !== '' ? $form['username'] : null,
                 'display_name' => $form['display_name'] !== '' ? $form['display_name'] : null,
                 'external_account_id' => $form['external_account_id'] !== '' ? $form['external_account_id'] : null,
@@ -235,7 +250,16 @@ require __DIR__ . '/../../includes/header.php';
     <div class="card am-card mb-3">
         <div class="card-header bg-white fw-bold"><?= e(t('common.basic_info')) ?></div>
         <div class="card-body row g-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
+                <label class="form-label"><?= e(t('accounts.field_identity_type_required')) ?></label>
+                <select name="identity_type" id="identity_type" class="form-select" required>
+                    <option value="email" <?= $form['identity_type'] === 'email' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_email')) ?></option>
+                    <option value="phone" <?= $form['identity_type'] === 'phone' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_phone')) ?></option>
+                    <option value="username" <?= $form['identity_type'] === 'username' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_username')) ?></option>
+                    <option value="other" <?= $form['identity_type'] === 'other' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_other')) ?></option>
+                </select>
+            </div>
+            <div class="col-md-4">
                 <label class="form-label"><?= e(t('accounts.field_service_required')) ?></label>
                 <select name="service_id" class="form-select" required>
                     <option value=""><?= e(t('common.select_placeholder')) ?></option>
@@ -244,12 +268,21 @@ require __DIR__ . '/../../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4" id="identity-email-group">
                 <label class="form-label"><?= e(t('accounts.field_email_required')) ?></label>
-                <select name="email_id" class="form-select" required>
+                <select name="email_id" class="form-select">
                     <option value=""><?= e(t('common.select_placeholder')) ?></option>
                     <?php foreach ($emails as $em): ?>
                         <option value="<?= (int) $em['id'] ?>" <?= $form['email_id'] === (string) $em['id'] ? 'selected' : '' ?>><?= e($em['email_address']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-4" id="identity-phone-group" style="display:none;">
+                <label class="form-label"><?= e(t('accounts.field_identity_phone_required')) ?></label>
+                <select name="identity_phone_id" class="form-select">
+                    <option value=""><?= e(t('common.select_placeholder')) ?></option>
+                    <?php foreach ($phones as $ph): ?>
+                        <option value="<?= (int) $ph['id'] ?>" <?= $form['identity_phone_id'] === (string) $ph['id'] ? 'selected' : '' ?>><?= e($ph['phone_number']) ?><?= $ph['label'] ? ' (' . e($ph['label']) . ')' : '' ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -504,6 +537,21 @@ require __DIR__ . '/../../includes/header.php';
         freeNote.style.display = isFree ? '' : 'none';
     }
     typeSelect.addEventListener('change', update);
+    update();
+})();
+(function () {
+    var identitySelect = document.getElementById('identity_type');
+    var emailGroup = document.getElementById('identity-email-group');
+    var phoneGroup = document.getElementById('identity-phone-group');
+    if (!identitySelect || !emailGroup || !phoneGroup) {
+        return;
+    }
+    function update() {
+        var type = identitySelect.value;
+        emailGroup.style.display = type === 'email' ? '' : 'none';
+        phoneGroup.style.display = type === 'phone' ? '' : 'none';
+    }
+    identitySelect.addEventListener('change', update);
     update();
 })();
 </script>

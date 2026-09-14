@@ -7,7 +7,7 @@ ini_set('display_errors', '0');
 date_default_timezone_set('Asia/Tehran');
 
 define('APP_NAME', 'Account Manager');
-define('APP_VERSION', '1.4.0');
+define('APP_VERSION', '1.5.0');
 define('APP_ROOT', __DIR__);
 define('DATA_DIR', __DIR__ . '/data');
 define('DB_PATH', DATA_DIR . '/database.sqlite');

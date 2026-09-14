@@ -604,4 +604,26 @@ return [
     'common.list_separator' => '، ',
 
     'app.native_name' => 'العربية',
+
+    'accounts.field_identity_type_required' => 'نوع الهوية *',
+    'accounts.identity_type_email' => 'البريد الإلكتروني',
+    'accounts.identity_type_phone' => 'الهاتف',
+    'accounts.identity_type_username' => 'اسم المستخدم',
+    'accounts.identity_type_other' => 'أخرى',
+    'accounts.field_identity_phone_required' => 'رقم الهاتف *',
+    'accounts.identity_type_invalid' => 'نوع الهوية غير صالح.',
+    'accounts.identity_phone_required' => 'اختر رقم هاتف صالحًا لنوع الهوية هذا.',
+    'accounts.identity_username_required' => 'اسم المستخدم مطلوب لنوع الهوية هذا.',
+
+    'accounts.identity_label' => 'الهوية',
+    'accounts.th_identity' => 'الهوية',
+    'accounts.all_identity_types' => 'كل أنواع الهوية',
+    'phones.identity_accounts_title' => 'الحسابات التي أُنشئت بهذا الرقم',
+    'phones.no_identity_accounts' => 'لم يتم إنشاء أي حساب بهذا الرقم.',
+
+    'phones.security_heading' => 'أمان الهاتف',
+    'phones.field_sim_pin_status' => 'حالة رمز PIN للشريحة',
+    'phones.field_port_out_lock' => 'قفل نقل الرقم (Port-out)',
+    'phones.field_carrier' => 'مشغل الشبكة',
+    'phones.field_esim' => 'الشريحة الإلكترونية (eSIM)',
 ];
