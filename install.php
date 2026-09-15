@@ -32,6 +32,19 @@ function installSchemaStatements(): array
             updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
         )',
 
+        'CREATE TABLE IF NOT EXISTS phone_security (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_id INTEGER NOT NULL UNIQUE REFERENCES phones(id) ON DELETE CASCADE,
+            sim_pin_status TEXT NOT NULL DEFAULT \'Not Set\' CHECK (sim_pin_status IN (\'Enabled\',\'Disabled\',\'Unknown\',\'Not Set\',\'Not Applicable\')),
+            port_out_lock TEXT NOT NULL DEFAULT \'Not Set\' CHECK (port_out_lock IN (\'Enabled\',\'Disabled\',\'Unknown\',\'Not Set\',\'Not Applicable\')),
+            carrier TEXT,
+            esim INTEGER,
+            last_security_check TEXT,
+            security_score INTEGER CHECK (security_score IS NULL OR (security_score BETWEEN 0 AND 100)),
+            created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
+        )',
+
         'CREATE TABLE IF NOT EXISTS emails (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email_address TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -93,7 +106,9 @@ function installSchemaStatements(): array
         'CREATE TABLE IF NOT EXISTS accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE RESTRICT,
-            email_id INTEGER NOT NULL REFERENCES emails(id) ON DELETE RESTRICT,
+            email_id INTEGER REFERENCES emails(id) ON DELETE RESTRICT,
+            identity_type TEXT NOT NULL DEFAULT \'email\' CHECK (identity_type IN (\'email\',\'phone\',\'username\',\'other\')),
+            identity_phone_id INTEGER REFERENCES phones(id) ON DELETE RESTRICT,
             username TEXT,
             display_name TEXT,
             external_account_id TEXT,
@@ -107,11 +122,18 @@ function installSchemaStatements(): array
             notes TEXT,
             is_archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
-            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
+            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            CHECK (
+                (identity_type = \'email\'    AND email_id IS NOT NULL) OR
+                (identity_type = \'phone\'    AND identity_phone_id IS NOT NULL) OR
+                (identity_type = \'username\' AND username IS NOT NULL) OR
+                (identity_type = \'other\')
+            )
         )',
         'CREATE INDEX IF NOT EXISTS idx_accounts_service ON accounts(service_id)',
         'CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email_id)',
         'CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(status)',
+        'CREATE INDEX IF NOT EXISTS idx_accounts_identity_phone ON accounts(identity_phone_id)',
 
         'CREATE TABLE IF NOT EXISTS account_security (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -245,7 +267,7 @@ function installTriggerStatements(): array
 {
     $tablesWithUpdatedAt = [
         'users', 'emails', 'email_security', 'services', 'accounts',
-        'account_security', 'account_recovery', 'phones', 'subscriptions',
+        'account_security', 'account_recovery', 'phones', 'phone_security', 'subscriptions',
         'payments', 'custom_fields',
     ];
 

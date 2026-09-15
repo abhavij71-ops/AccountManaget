@@ -604,4 +604,26 @@ return [
     'common.list_separator' => ', ',
 
     'app.native_name' => 'English',
+
+    'accounts.field_identity_type_required' => 'Identity type *',
+    'accounts.identity_type_email' => 'Email',
+    'accounts.identity_type_phone' => 'Phone',
+    'accounts.identity_type_username' => 'Username',
+    'accounts.identity_type_other' => 'Other',
+    'accounts.field_identity_phone_required' => 'Phone number *',
+    'accounts.identity_type_invalid' => 'Invalid identity type.',
+    'accounts.identity_phone_required' => 'Select a valid phone number for this identity type.',
+    'accounts.identity_username_required' => 'A username is required for this identity type.',
+
+    'accounts.identity_label' => 'Identity',
+    'accounts.th_identity' => 'Identity',
+    'accounts.all_identity_types' => 'All identity types',
+    'phones.identity_accounts_title' => 'Accounts created with this number',
+    'phones.no_identity_accounts' => 'No account was created with this number.',
+
+    'phones.security_heading' => 'Phone security',
+    'phones.field_sim_pin_status' => 'SIM PIN status',
+    'phones.field_port_out_lock' => 'Port-out lock',
+    'phones.field_carrier' => 'Carrier',
+    'phones.field_esim' => 'eSIM',
 ];

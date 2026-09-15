@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/security-score.php';
 
 requireLogin();
 
@@ -57,6 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
+$stmt = $pdo->prepare('SELECT * FROM phone_security WHERE phone_id = ?');
+$stmt->execute([$id]);
+$phoneSecurity = $stmt->fetch() ?: null;
+$phoneSecurityScore = calcPhoneSecurityScore($phoneSecurity);
+
 $tags = fetchEntityTags($pdo, 'phone', $id);
 $allTagNames = $pdo->query('SELECT name FROM tags ORDER BY name')->fetchAll(PDO::FETCH_COLUMN);
 
@@ -81,6 +87,12 @@ $stmt = $pdo->prepare('SELECT a.id, a.username, a.status, s.id AS service_id, s.
     JOIN phone_account pa ON pa.account_id = a.id WHERE pa.phone_id = ? ORDER BY s.service_name');
 $stmt->execute([$id]);
 $linkedAccounts = $stmt->fetchAll();
+
+$stmt = $pdo->prepare('SELECT a.id, a.username, a.status, s.id AS service_id, s.service_name FROM accounts a
+    JOIN services s ON s.id = a.service_id
+    WHERE a.identity_phone_id = ? ORDER BY s.service_name');
+$stmt->execute([$id]);
+$identityAccounts = $stmt->fetchAll();
 
 $pageTitle = $phone['phone_number'];
 require __DIR__ . '/../../includes/header.php';
@@ -117,6 +129,28 @@ require __DIR__ . '/../../includes/header.php';
                 </dl>
             </div>
         </div>
+        <div class="card am-card mb-3">
+            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                <span><?= e(t('phones.security_heading')) ?></span>
+                <?php if ($phoneSecurityScore !== null): ?>
+                    <span class="text-muted small"><?= e(t('common.security_score')) ?>: <?= (int) $phoneSecurityScore ?>%</span>
+                <?php endif; ?>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-6"><?= e(t('phones.field_sim_pin_status')) ?></dt><dd class="col-6"><?= renderBadge($phoneSecurity['sim_pin_status'] ?? null, SECURITY_STATES) ?></dd>
+                    <dt class="col-6"><?= e(t('phones.field_port_out_lock')) ?></dt><dd class="col-6"><?= renderBadge($phoneSecurity['port_out_lock'] ?? null, SECURITY_STATES) ?></dd>
+                    <dt class="col-6"><?= e(t('phones.field_carrier')) ?></dt><dd class="col-6"><?= dashOrValue($phoneSecurity['carrier'] ?? null) ?></dd>
+                    <dt class="col-6"><?= e(t('phones.field_esim')) ?></dt>
+                    <dd class="col-6"><?php
+                        $esim = $phoneSecurity['esim'] ?? null;
+                        echo yesNoBadge($esim === null ? null : (bool) $esim);
+                    ?></dd>
+                    <dt class="col-6"><?= e(t('field.last_security_check')) ?></dt><dd class="col-6"><?= dashOrValue($phoneSecurity['last_security_check'] ?? null) ?></dd>
+                </dl>
+            </div>
+        </div>
+
         <div class="card am-card mb-3">
             <div class="card-header bg-white fw-bold"><?= e(t('common.field_notes')) ?></div>
             <div class="card-body">
@@ -169,6 +203,30 @@ require __DIR__ . '/../../includes/header.php';
                     <thead><tr><th><?= e(t('accounts.th_service')) ?></th><th><?= e(t('accounts.th_username')) ?></th><th><?= e(t('common.field_status')) ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($linkedAccounts as $acc): ?>
+                        <tr>
+                            <td><a href="../services/view.php?id=<?= (int) $acc['service_id'] ?>"><?= e($acc['service_name']) ?></a></td>
+                            <td><a href="../accounts/view.php?id=<?= (int) $acc['id'] ?>"><?= $acc['username'] ? e($acc['username']) : e(t('emails.view_account')) ?></a></td>
+                            <td><?= renderBadge($acc['status'], ACCOUNT_STATUSES) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="card am-card mb-3">
+    <div class="card-header bg-white fw-bold"><?= e(t('phones.identity_accounts_title')) ?></div>
+    <div class="card-body">
+        <?php if (!$identityAccounts): ?>
+            <p class="text-muted mb-0"><?= e(t('phones.no_identity_accounts')) ?></p>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th><?= e(t('accounts.th_service')) ?></th><th><?= e(t('accounts.th_username')) ?></th><th><?= e(t('common.field_status')) ?></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($identityAccounts as $acc): ?>
                         <tr>
                             <td><a href="../services/view.php?id=<?= (int) $acc['service_id'] ?>"><?= e($acc['service_name']) ?></a></td>
                             <td><a href="../accounts/view.php?id=<?= (int) $acc['id'] ?>"><?= $acc['username'] ? e($acc['username']) : e(t('emails.view_account')) ?></a></td>

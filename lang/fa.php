@@ -604,4 +604,26 @@ return [
     'common.list_separator' => '، ',
 
     'app.native_name' => 'فارسی',
+
+    'accounts.field_identity_type_required' => 'نوع هویت *',
+    'accounts.identity_type_email' => 'ایمیل',
+    'accounts.identity_type_phone' => 'تلفن',
+    'accounts.identity_type_username' => 'نام کاربری',
+    'accounts.identity_type_other' => 'سایر',
+    'accounts.field_identity_phone_required' => 'شماره تلفن *',
+    'accounts.identity_type_invalid' => 'نوع هویت نامعتبر است.',
+    'accounts.identity_phone_required' => 'برای این نوع هویت، یک شماره تلفن معتبر انتخاب کنید.',
+    'accounts.identity_username_required' => 'برای این نوع هویت، نام کاربری الزامی است.',
+
+    'accounts.identity_label' => 'هویت',
+    'accounts.th_identity' => 'هویت',
+    'accounts.all_identity_types' => 'همه انواع هویت',
+    'phones.identity_accounts_title' => 'اکانت‌های ساخته‌شده با این شماره',
+    'phones.no_identity_accounts' => 'هیچ اکانتی با این شماره ساخته نشده است.',
+
+    'phones.security_heading' => 'امنیت شماره تلفن',
+    'phones.field_sim_pin_status' => 'وضعیت پین سیم‌کارت (SIM PIN)',
+    'phones.field_port_out_lock' => 'قفل انتقال شماره (Port-out Lock)',
+    'phones.field_carrier' => 'اپراتور',
+    'phones.field_esim' => 'eSIM',
 ];

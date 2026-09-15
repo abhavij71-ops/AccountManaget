@@ -77,6 +77,71 @@ function countEmailSecurityIssues(?array $security): int
 }
 
 /**
+ * Weighted score of the Phone's OWN security posture only (SIM-swap /
+ * port-out protections, IDENTITY-MODEL.md sec. 5) — mirrors
+ * calcEmailSecurityScore(); never influenced by the security state of any
+ * Account anchored to this phone.
+ */
+function calcPhoneSecurityScore(?array $security): ?int
+{
+    if ($security === null) {
+        return null;
+    }
+
+    $weights = [
+        'sim_pin_status' => 50,
+        'port_out_lock' => 35,
+    ];
+
+    $earned = 0;
+    $possible = 0;
+
+    foreach ($weights as $field => $weight) {
+        $value = $security[$field] ?? 'Not Set';
+        if ($value === 'Not Applicable') {
+            continue;
+        }
+        $possible += $weight;
+        if ($value === 'Enabled') {
+            $earned += $weight;
+        }
+    }
+
+    $possible += 15;
+    if (!empty($security['last_security_check'])) {
+        $checkedAt = strtotime((string) $security['last_security_check']);
+        if ($checkedAt !== false && $checkedAt >= strtotime('-180 days')) {
+            $earned += 15;
+        }
+    }
+
+    if ($possible === 0) {
+        return null;
+    }
+
+    return (int) round(($earned / $possible) * 100);
+}
+
+/**
+ * Count of confirmed (Disabled) security weaknesses on the Phone itself —
+ * mirrors countEmailSecurityIssues().
+ */
+function countPhoneSecurityIssues(?array $security): int
+{
+    if ($security === null) {
+        return 0;
+    }
+    $fields = ['sim_pin_status', 'port_out_lock'];
+    $count = 0;
+    foreach ($fields as $field) {
+        if (($security[$field] ?? null) === 'Disabled') {
+            $count++;
+        }
+    }
+    return $count;
+}
+
+/**
  * Tallies a security-state column across a set of rows, keeping all five states
  * (spec sec. 9) as separate buckets — a row with no value at all counts as
  * "Not Set" (never entered), while an explicit 'Unknown' value counts as

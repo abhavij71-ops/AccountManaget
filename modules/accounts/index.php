@@ -12,11 +12,12 @@ $q = trim((string) ($_GET['q'] ?? ''));
 $statusFilter = (string) ($_GET['status'] ?? '');
 $typeFilter = (string) ($_GET['type'] ?? '');
 $serviceFilter = (int) ($_GET['service_id'] ?? 0);
+$identityTypeFilter = (string) ($_GET['identity_type'] ?? '');
 $showArchived = isset($_GET['archived']);
 
 $sortable = [
     'service' => 's.service_name',
-    'email' => 'e.email_address',
+    'identity' => "COALESCE(e.email_address, ip.phone_number, a.username, '')",
     'username' => 'a.username',
     'status' => 'a.status',
     'plan' => 'sub.plan',
@@ -51,10 +52,15 @@ if ($serviceFilter > 0) {
     $where[] = 'a.service_id = :service_id';
     $params['service_id'] = $serviceFilter;
 }
+if ($identityTypeFilter !== '' && in_array($identityTypeFilter, ['email', 'phone', 'username', 'other'], true)) {
+    $where[] = 'a.identity_type = :identity_type';
+    $params['identity_type'] = $identityTypeFilter;
+}
 
 $baseSql = 'FROM accounts a
     JOIN services s ON s.id = a.service_id
-    JOIN emails e ON e.id = a.email_id
+    LEFT JOIN emails e ON e.id = a.email_id
+    LEFT JOIN phones ip ON ip.id = a.identity_phone_id
     LEFT JOIN subscriptions sub ON sub.account_id = a.id
     LEFT JOIN account_security acs ON acs.account_id = a.id';
 $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
@@ -68,7 +74,9 @@ $perPage = resolvePerPage($_GET['per_page'] ?? null);
 [$page, $limit, $offset] = paginationBounds($filteredCount, $page, $perPage);
 
 $sql = 'SELECT a.id, a.username, a.display_name, a.status, a.account_type, a.last_verified, a.is_archived,
+        a.identity_type,
         s.id AS service_id, s.service_name, e.id AS email_id, e.email_address,
+        ip.id AS identity_phone_id, ip.phone_number AS identity_phone_number,
         sub.plan, acs.twofa_status ' . $baseSql . $whereSql . ' ORDER BY ' . $sortable[$sort] . ' ' . $dir;
 if ($limit !== null) {
     $sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
@@ -118,6 +126,15 @@ require __DIR__ . '/../../includes/header.php';
         </select>
     </div>
     <div class="col-md-2">
+        <select name="identity_type" class="form-select">
+            <option value=""><?= e(t('accounts.all_identity_types')) ?></option>
+            <option value="email" <?= $identityTypeFilter === 'email' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_email')) ?></option>
+            <option value="phone" <?= $identityTypeFilter === 'phone' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_phone')) ?></option>
+            <option value="username" <?= $identityTypeFilter === 'username' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_username')) ?></option>
+            <option value="other" <?= $identityTypeFilter === 'other' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_other')) ?></option>
+        </select>
+    </div>
+    <div class="col-md-2">
         <select name="status" class="form-select">
             <option value=""><?= e(t('common.all_statuses')) ?></option>
             <?= optionsHtml(ACCOUNT_STATUSES, $statusFilter) ?>
@@ -160,7 +177,7 @@ require __DIR__ . '/../../includes/header.php';
                 <thead>
                     <tr>
                         <th><?= accountSortLink('service', t('accounts.th_service'), $sort, $dir) ?></th>
-                        <th><?= accountSortLink('email', t('accounts.th_email'), $sort, $dir) ?></th>
+                        <th><?= accountSortLink('identity', t('accounts.th_identity'), $sort, $dir) ?></th>
                         <th><?= accountSortLink('username', t('accounts.th_username'), $sort, $dir) ?></th>
                         <th><?= accountSortLink('status', t('common.field_status'), $sort, $dir) ?></th>
                         <th><?= accountSortLink('plan', t('accounts.th_plan'), $sort, $dir) ?></th>
@@ -173,7 +190,23 @@ require __DIR__ . '/../../includes/header.php';
                 <?php foreach ($accounts as $row): ?>
                     <tr>
                         <td><a href="../services/view.php?id=<?= (int) $row['service_id'] ?>"><?= e($row['service_name']) ?></a></td>
-                        <td><a href="../emails/view.php?id=<?= (int) $row['email_id'] ?>"><?= e($row['email_address']) ?></a></td>
+                        <td>
+                            <?php if ($row['identity_type'] === 'phone'): ?>
+                                <?php if ($row['identity_phone_id']): ?>
+                                    <a href="../phones/view.php?id=<?= (int) $row['identity_phone_id'] ?>"><?= e($row['identity_phone_number']) ?></a>
+                                <?php else: ?>
+                                    <?= dashOrValue(null) ?>
+                                <?php endif; ?>
+                            <?php elseif ($row['identity_type'] === 'username'): ?>
+                                <?= dashOrValue($row['username']) ?>
+                            <?php elseif ($row['identity_type'] === 'other'): ?>
+                                <span class="text-muted"><?= e(t('accounts.identity_type_other')) ?></span>
+                            <?php elseif ($row['email_id']): ?>
+                                <a href="../emails/view.php?id=<?= (int) $row['email_id'] ?>"><?= e($row['email_address']) ?></a>
+                            <?php else: ?>
+                                <?= dashOrValue(null) ?>
+                            <?php endif; ?>
+                        </td>
                         <td><?= dashOrValue($row['username']) ?></td>
                         <td>
                             <?= renderBadge($row['status'], ACCOUNT_STATUSES) ?>
