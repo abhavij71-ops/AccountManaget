@@ -24,8 +24,9 @@ function db(): PDO
         $pdo->exec('PRAGMA journal_mode = WAL');
         applySchemaUpgrades($pdo);
     } catch (PDOException $e) {
+        error_log('Account Manager: database connection failed: ' . $e->getMessage());
         http_response_code(500);
-        die(t('db.connection_error', ['error' => $e->getMessage()]));
+        die(APP_DEBUG ? t('db.connection_error', ['error' => $e->getMessage()]) : t('db.connection_error_generic'));
     }
 
     return $pdo;
@@ -45,7 +46,35 @@ function applySchemaUpgrades(PDO $pdo): void
     }
 
     migrateAccountsIdentityAnchor($pdo);
+    repairAccountsOldReferences($pdo);
+    migrateAccountsIdentityValue($pdo);
     migratePhoneSecurityTable($pdo);
+}
+
+/**
+ * Adds identity_value (free-text label for identity_type='other') for
+ * databases created before this change. Plain ADD COLUMN — no rename, no
+ * rebuild, no CHECK change, no backfill needed since it's nullable.
+ *
+ * Deliberately NOT enforced by a CHECK: an 'other'-anchored account with no
+ * recorded value is a legitimate state in this product's five-state model
+ * (missing knowledge), not an error to forbid at the schema level — PHP-side
+ * validation already treats it as optional, and needs-attention.php surfaces
+ * it as an Informational nudge instead.
+ */
+function migrateAccountsIdentityValue(PDO $pdo): void
+{
+    $tableExists = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='accounts'")->fetchColumn();
+    if (!$tableExists) {
+        return;
+    }
+
+    $columns = $pdo->query('PRAGMA table_info(accounts)')->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (in_array('identity_value', $columns, true)) {
+        return;
+    }
+
+    $pdo->exec('ALTER TABLE accounts ADD COLUMN identity_value TEXT');
 }
 
 /**
@@ -101,6 +130,13 @@ function migrateAccountsIdentityAnchor(PDO $pdo): void
 
     backupDatabaseFile($pdo);
 
+    // legacy_alter_table = ON stops SQLite (>=3.25) from rewriting OTHER tables'
+    // REFERENCES clauses to follow this rename — without it, account_security,
+    // account_recovery, phone_account, subscriptions, payments, and custom_fields
+    // would all end up pointing at "accounts_old" and break the moment it's
+    // dropped below. See repairAccountsOldReferences() for the fix-up when this
+    // already happened on a database migrated before this pragma was added.
+    $pdo->exec('PRAGMA legacy_alter_table = ON');
     $pdo->exec('PRAGMA foreign_keys = OFF');
     $pdo->beginTransaction();
     try {
@@ -172,6 +208,215 @@ function migrateAccountsIdentityAnchor(PDO $pdo): void
         throw $e;
     } finally {
         $pdo->exec('PRAGMA foreign_keys = ON');
+        $pdo->exec('PRAGMA legacy_alter_table = OFF');
+    }
+}
+
+/**
+ * Repairs databases where migrateAccountsIdentityAnchor() hit the SQLite
+ * >=3.25 bug above before the legacy_alter_table fix existed: renaming
+ * "accounts" silently rewrote six other tables' REFERENCES clauses to point
+ * at "accounts_old", which was then dropped, leaving every one of them
+ * referencing a table that no longer exists. With PRAGMA foreign_keys = ON
+ * (set on every connection — see db()), any INSERT/UPDATE against those
+ * tables now fails with "no such table: main.accounts_old".
+ *
+ * Detection and repair are the same query: any table whose stored DDL still
+ * mentions accounts_old is broken and gets rebuilt; once every affected
+ * table is fixed, the scan finds nothing and this becomes a no-op — no
+ * separate "has this run" flag needed.
+ */
+function repairAccountsOldReferences(PDO $pdo): void
+{
+    $affected = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%accounts_old%'")
+        ->fetchAll(PDO::FETCH_COLUMN);
+    if (!$affected) {
+        return;
+    }
+
+    backupDatabaseFile($pdo);
+
+    // DDL copied verbatim from installSchemaStatements() in install.php — the correct,
+    // never-corrupted definition of each table, restoring `REFERENCES accounts(id)`.
+    $rebuilds = [
+        'account_security' => [
+            'ddl' => "CREATE TABLE account_security (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
+                twofa_status TEXT NOT NULL DEFAULT 'Not Set' CHECK (twofa_status IN ('Enabled','Disabled','Unknown','Not Set','Not Applicable')),
+                twofa_method TEXT,
+                passkey_status TEXT NOT NULL DEFAULT 'Not Set' CHECK (passkey_status IN ('Enabled','Disabled','Unknown','Not Set','Not Applicable')),
+                security_key_status TEXT NOT NULL DEFAULT 'Not Set' CHECK (security_key_status IN ('Enabled','Disabled','Unknown','Not Set','Not Applicable')),
+                security_questions_status TEXT NOT NULL DEFAULT 'Not Set' CHECK (security_questions_status IN ('Enabled','Disabled','Unknown','Not Set','Not Applicable')),
+                last_security_check TEXT,
+                credential_storage TEXT,
+                credential_reference TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            'columns' => ['id', 'account_id', 'twofa_status', 'twofa_method', 'passkey_status', 'security_key_status', 'security_questions_status', 'last_security_check', 'credential_storage', 'credential_reference', 'created_at', 'updated_at'],
+            'indexes' => [],
+            'trigger' => true,
+        ],
+        'account_recovery' => [
+            'ddl' => "CREATE TABLE account_recovery (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
+                status TEXT NOT NULL DEFAULT 'Not Set' CHECK (status IN ('Verified','Not Verified','Unknown','Not Set','Not Applicable')),
+                recovery_email_id INTEGER REFERENCES emails(id) ON DELETE SET NULL,
+                recovery_phone_id INTEGER REFERENCES phones(id) ON DELETE SET NULL,
+                recovery_contact TEXT,
+                recovery_codes_status TEXT NOT NULL DEFAULT 'Not Set' CHECK (recovery_codes_status IN ('Enabled','Disabled','Unknown','Not Set','Not Applicable')),
+                recovery_codes_reference TEXT,
+                backup_method TEXT,
+                last_recovery_verification TEXT,
+                recovery_notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            'columns' => ['id', 'account_id', 'status', 'recovery_email_id', 'recovery_phone_id', 'recovery_contact', 'recovery_codes_status', 'recovery_codes_reference', 'backup_method', 'last_recovery_verification', 'recovery_notes', 'created_at', 'updated_at'],
+            'indexes' => [
+                'idx_account_recovery_email' => 'CREATE INDEX idx_account_recovery_email ON account_recovery(recovery_email_id)',
+                'idx_account_recovery_phone' => 'CREATE INDEX idx_account_recovery_phone ON account_recovery(recovery_phone_id)',
+            ],
+            'trigger' => true,
+        ],
+        'phone_account' => [
+            'ddl' => "CREATE TABLE phone_account (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone_id INTEGER NOT NULL REFERENCES phones(id) ON DELETE CASCADE,
+                account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (phone_id, account_id)
+            )",
+            'columns' => ['id', 'phone_id', 'account_id', 'created_at'],
+            'indexes' => [
+                'idx_phone_account_account' => 'CREATE INDEX idx_phone_account_account ON phone_account(account_id)',
+                'idx_phone_account_phone' => 'CREATE INDEX idx_phone_account_phone ON phone_account(phone_id)',
+            ],
+            'trigger' => false,
+        ],
+        'subscriptions' => [
+            'ddl' => "CREATE TABLE subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
+                type TEXT NOT NULL DEFAULT 'Unknown' CHECK (type IN ('Free','Paid','Trial','Promotional','Lifetime','Enterprise','Unknown','Not Applicable')),
+                plan TEXT,
+                status TEXT NOT NULL DEFAULT 'Unknown' CHECK (status IN ('Active','Cancelled','Expired','Paused','Unknown','Not Applicable')),
+                price REAL,
+                currency TEXT,
+                billing_cycle TEXT NOT NULL DEFAULT 'Not Applicable' CHECK (billing_cycle IN ('Monthly','Yearly','Weekly','Quarterly','One-Time','Custom','Unknown','Not Applicable')),
+                start_date TEXT,
+                renewal_date TEXT,
+                auto_renewal INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            'columns' => ['id', 'account_id', 'type', 'plan', 'status', 'price', 'currency', 'billing_cycle', 'start_date', 'renewal_date', 'auto_renewal', 'created_at', 'updated_at'],
+            'indexes' => [
+                'idx_subscriptions_renewal' => 'CREATE INDEX idx_subscriptions_renewal ON subscriptions(renewal_date)',
+                'idx_subscriptions_type' => 'CREATE INDEX idx_subscriptions_type ON subscriptions(type)',
+                'idx_subscriptions_currency' => 'CREATE INDEX idx_subscriptions_currency ON subscriptions(currency)',
+            ],
+            'trigger' => true,
+        ],
+        'payments' => [
+            'ddl' => "CREATE TABLE payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
+                payment_required INTEGER NOT NULL DEFAULT 0,
+                payment_method TEXT,
+                card_brand TEXT,
+                last4 TEXT CHECK (last4 IS NULL OR (length(last4) = 4 AND last4 GLOB '[0-9][0-9][0-9][0-9]')),
+                payment_reference TEXT,
+                auto_renewal INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            'columns' => ['id', 'account_id', 'payment_required', 'payment_method', 'card_brand', 'last4', 'payment_reference', 'auto_renewal', 'created_at', 'updated_at'],
+            'indexes' => [],
+            'trigger' => true,
+        ],
+        'custom_fields' => [
+            'ddl' => "CREATE TABLE custom_fields (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                field_key TEXT NOT NULL,
+                field_value TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (account_id, field_key)
+            )",
+            'columns' => ['id', 'account_id', 'field_key', 'field_value', 'created_at', 'updated_at'],
+            'indexes' => [
+                'idx_custom_fields_account' => 'CREATE INDEX idx_custom_fields_account ON custom_fields(account_id)',
+            ],
+            'trigger' => true,
+        ],
+    ];
+
+    foreach ($rebuilds as $table => $spec) {
+        if (in_array($table, $affected, true)) {
+            rebuildTableReferencingAccounts($pdo, $table, $spec);
+        }
+    }
+
+    $violations = $pdo->query('PRAGMA foreign_key_check')->fetchAll();
+    if ($violations) {
+        error_log('Account Manager: PRAGMA foreign_key_check found remaining violations after repairAccountsOldReferences(): ' . json_encode($violations));
+    }
+}
+
+/**
+ * Rebuilds one table via rename -> create (correct DDL) -> copy -> drop ->
+ * recreate indexes/trigger, guarded by legacy_alter_table so this rename
+ * doesn't itself corrupt some other table's REFERENCES clause the same way.
+ *
+ * @param array{ddl:string,columns:string[],indexes:array<string,string>,trigger:bool} $spec
+ */
+function rebuildTableReferencingAccounts(PDO $pdo, string $table, array $spec): void
+{
+    $oldTable = $table . '_old';
+    $cols = implode(', ', $spec['columns']);
+
+    $pdo->exec('PRAGMA legacy_alter_table = ON');
+    $pdo->exec('PRAGMA foreign_keys = OFF');
+    $pdo->beginTransaction();
+    try {
+        $pdo->exec("ALTER TABLE {$table} RENAME TO {$oldTable}");
+
+        foreach (array_keys($spec['indexes']) as $indexName) {
+            $pdo->exec("DROP INDEX IF EXISTS {$indexName}");
+        }
+        if ($spec['trigger']) {
+            $pdo->exec("DROP TRIGGER IF EXISTS trg_{$table}_updated_at");
+        }
+
+        $pdo->exec($spec['ddl']);
+
+        $pdo->exec("INSERT INTO {$table} ({$cols}) SELECT {$cols} FROM {$oldTable}");
+
+        $pdo->exec("DROP TABLE {$oldTable}");
+
+        foreach ($spec['indexes'] as $createIndexSql) {
+            $pdo->exec($createIndexSql);
+        }
+        if ($spec['trigger']) {
+            $pdo->exec("CREATE TRIGGER trg_{$table}_updated_at
+                AFTER UPDATE ON {$table}
+                FOR EACH ROW
+                BEGIN
+                    UPDATE {$table} SET updated_at = datetime('now') WHERE id = NEW.id;
+                END");
+        }
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    } finally {
+        $pdo->exec('PRAGMA foreign_keys = ON');
+        $pdo->exec('PRAGMA legacy_alter_table = OFF');
     }
 }
 

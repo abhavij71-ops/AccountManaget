@@ -74,7 +74,7 @@ $perPage = resolvePerPage($_GET['per_page'] ?? null);
 [$page, $limit, $offset] = paginationBounds($filteredCount, $page, $perPage);
 
 $sql = 'SELECT a.id, a.username, a.display_name, a.status, a.account_type, a.last_verified, a.is_archived,
-        a.identity_type,
+        a.identity_type, a.identity_value,
         s.id AS service_id, s.service_name, e.id AS email_id, e.email_address,
         ip.id AS identity_phone_id, ip.phone_number AS identity_phone_number,
         sub.plan, acs.twofa_status ' . $baseSql . $whereSql . ' ORDER BY ' . $sortable[$sort] . ' ' . $dir;
@@ -157,6 +157,8 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </form>
 
+<p class="text-muted small mb-2"><?= e(t('common.records_count', ['count' => $filteredCount])) ?></p>
+
 <?php if (!$totalCount): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">
@@ -200,7 +202,7 @@ require __DIR__ . '/../../includes/header.php';
                             <?php elseif ($row['identity_type'] === 'username'): ?>
                                 <?= dashOrValue($row['username']) ?>
                             <?php elseif ($row['identity_type'] === 'other'): ?>
-                                <span class="text-muted"><?= e(t('accounts.identity_type_other')) ?></span>
+                                <?= !empty($row['identity_value']) ? e($row['identity_value']) : dashOrValue(null) ?>
                             <?php elseif ($row['email_id']): ?>
                                 <a href="../emails/view.php?id=<?= (int) $row['email_id'] ?>"><?= e($row['email_address']) ?></a>
                             <?php else: ?>

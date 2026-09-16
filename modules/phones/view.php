@@ -282,7 +282,7 @@ require __DIR__ . '/../../includes/header.php';
                     <li class="mb-2 pb-2 border-bottom">
                         <div class="d-flex justify-content-between">
                             <strong><?= e(historyActionLabel($h['action'])) ?></strong>
-                            <span class="text-muted small"><?= e($h['created_at']) ?></span>
+                            <span class="text-muted small"><?= e(formatDate($h['created_at'], true)) ?></span>
                         </div>
                         <?php if ($h['field_name'] || $h['old_value'] !== null || $h['new_value'] !== null): ?>
                             <div class="small text-muted">

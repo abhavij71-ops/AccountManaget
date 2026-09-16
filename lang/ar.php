@@ -305,7 +305,7 @@ return [
 
     'ie.import_description' => 'استيراد البريد الإلكتروني أو الخدمات أو الهواتف أو الحسابات من ملف CSV. قبل كتابة أي تغيير، يتم إجراء معاينة والتحقق من الصحة واكتشاف التكرار، ولن يتم استبدال أي سجل موجود أبدًا دون تأكيدك الصريح.',
     'ie.start_import' => 'بدء الاستيراد',
-    'ie.export_description' => 'سيتم إضافة تصدير البريد الإلكتروني والحسابات والخدمات والاشتراكات وتقارير الأمان في مرحلة لاحقة.',
+    'ie.export_description' => 'تصدير البريد الإلكتروني أو الخدمات أو الحسابات أو الهواتف أو الاشتراكات كملف CSV. سيتم إضافة تصدير تقارير الأمان في مرحلة لاحقة.',
 
     'import.cannot_read_file' => 'تعذّرت قراءة الملف.',
     'import.file_empty' => 'الملف فارغ.',
@@ -626,4 +626,34 @@ return [
     'phones.field_port_out_lock' => 'قفل نقل الرقم (Port-out)',
     'phones.field_carrier' => 'مشغل الشبكة',
     'phones.field_esim' => 'الشريحة الإلكترونية (eSIM)',
+
+    'export.title' => 'التصدير',
+    'ie.start_export' => 'بدء التصدير',
+    'export.select_entity' => 'اختر البيانات التي تريد تصديرها.',
+    'export.field_entity_type' => 'نوع البيانات',
+    'export.entity_subscriptions' => 'الاشتراكات',
+    'export.download_button' => 'تنزيل CSV',
+    'export.col_identity_type' => 'نوع الهوية',
+
+    'app.calendar' => 'gregorian',
+
+    'nav.review' => 'المراجعة',
+    'review.title' => 'مراجعة الحسابات',
+    'review.progress' => 'مراجعة :current من :total',
+    'review.all_caught_up' => 'لا يوجد حساب يحتاج إلى مراجعة الآن.',
+    'review.confirmed_button' => 'تم التأكيد',
+    'review.changed_button' => 'تم التغيير',
+    'review.gone_button' => 'لم أعد أملكه',
+    'review.gone_confirm' => 'وضع علامة على هذا الحساب كمغلق (Closed)؟ يمكنك إعادة فتحه لاحقًا بتعديل حالته.',
+    'review.confirmed_success' => 'تم وضع علامة التحقق لهذا اليوم.',
+    'review.closed_success' => 'تم وضع علامة على الحساب كمغلق.',
+    'settings.backup_title' => 'النسخ الاحتياطي',
+    'settings.backup_description' => 'نزّل نسخة كاملة من ملف قاعدة البيانات. احتفظ بها في مكان آمن — فهي تحتوي على كل ما في حسابك.',
+    'settings.download_backup_button' => 'تنزيل النسخة الاحتياطية',
+
+    'common.records_count' => ':count سجل',
+
+    'accounts.field_identity_value' => 'قيمة الهوية',
+    'accounts.identity_value_placeholder' => 'مثال: رمز الدعوة، رقم العضوية',
+    'na.account_other_identity_missing' => 'نوع هوية هذا الحساب "أخرى" لكن لم يتم تسجيل أي قيمة له.',
 ];

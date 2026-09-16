@@ -305,7 +305,7 @@ return [
 
     'ie.import_description' => 'Import Emails, Services, Phones, or Accounts from a CSV file. Before any change is written, a preview, validation, and duplicate-detection pass runs, and no existing record is ever overwritten without your explicit confirmation.',
     'ie.start_import' => 'Start import',
-    'ie.export_description' => 'Exporting Emails, Accounts, Services, Subscriptions, and security reports will be added in a future phase.',
+    'ie.export_description' => 'Export Emails, Services, Accounts, Phones, or Subscriptions as a CSV file. Security reports export will be added in a future phase.',
 
     'import.cannot_read_file' => 'The file could not be read.',
     'import.file_empty' => 'The file is empty.',
@@ -600,6 +600,7 @@ return [
     'emails.apply_changes_button' => 'Apply changes',
 
     'db.connection_error' => 'Database connection error: :error',
+    'db.connection_error_generic' => 'A database connection error occurred. Please try again later or contact the administrator.',
 
     'common.list_separator' => ', ',
 
@@ -626,4 +627,34 @@ return [
     'phones.field_port_out_lock' => 'Port-out lock',
     'phones.field_carrier' => 'Carrier',
     'phones.field_esim' => 'eSIM',
+
+    'export.title' => 'Export',
+    'ie.start_export' => 'Start export',
+    'export.select_entity' => 'Select the data to export.',
+    'export.field_entity_type' => 'Data type',
+    'export.entity_subscriptions' => 'Subscriptions',
+    'export.download_button' => 'Download CSV',
+    'export.col_identity_type' => 'Identity type',
+
+    'app.calendar' => 'gregorian',
+
+    'nav.review' => 'Review',
+    'review.title' => 'Account Review',
+    'review.progress' => 'Reviewing :current of :total',
+    'review.all_caught_up' => 'No accounts need review right now.',
+    'review.confirmed_button' => 'Confirmed',
+    'review.changed_button' => 'Changed',
+    'review.gone_button' => 'No longer have it',
+    'review.gone_confirm' => 'Mark this account as Closed? You can reopen it later by editing its status.',
+    'review.confirmed_success' => 'Marked as verified today.',
+    'review.closed_success' => 'Account marked as Closed.',
+    'settings.backup_title' => 'Backup',
+    'settings.backup_description' => 'Download a full copy of the database file. Keep it somewhere safe — it contains everything in your account.',
+    'settings.download_backup_button' => 'Download backup',
+
+    'common.records_count' => ':count records',
+
+    'accounts.field_identity_value' => 'Identity value',
+    'accounts.identity_value_placeholder' => 'e.g. invite code, membership number',
+    'na.account_other_identity_missing' => "This account's identity type is \"Other\" but no value has been recorded for it.",
 ];

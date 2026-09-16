@@ -25,7 +25,7 @@ These five choices are deliberate. Reject any change that breaks one.
 | `config.php` | Constants, paths, session bootstrap, `APP_BASE_URL` detection |
 | `db.php` | PDO connection + lightweight runtime migrations |
 | `install.php` | Schema creation + admin user — single-use, delete after install |
-| `includes/auth.php` | Session, `requireLogin()`, CSRF |
+| `includes/auth.php` | Session, `requireLogin()` (also re-checks the account is still active on every request), `safeInternalRedirect()`, CSRF |
 | `includes/helpers.php` | Enum maps, badges, pagination, tags, `log_history()` |
 | `includes/lang.php` | The `t()` function, language resolution, text direction |
 | `includes/security-score.php` | Email security score calculation |

@@ -28,6 +28,7 @@ $form = [
     'identity_type' => (string) ($account['identity_type'] ?? 'email'),
     'email_id' => (string) ($account['email_id'] ?? ''),
     'identity_phone_id' => (string) ($account['identity_phone_id'] ?? ''),
+    'identity_value' => (string) ($account['identity_value'] ?? ''),
     'username' => (string) ($account['username'] ?? ''),
     'display_name' => (string) ($account['display_name'] ?? ''),
     'external_account_id' => (string) ($account['external_account_id'] ?? ''),
@@ -161,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             $baseDiffFields = [
-                'identity_type', 'username', 'display_name', 'external_account_id', 'account_url', 'login_url',
+                'identity_type', 'identity_value', 'username', 'display_name', 'external_account_id', 'account_url', 'login_url',
                 'account_type', 'created_date', 'last_login', 'last_verified', 'notes',
             ];
             foreach ($baseDiffFields as $f) {
@@ -191,6 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $stmt = $pdo->prepare('UPDATE accounts SET
                 service_id = :service_id, email_id = :email_id, identity_type = :identity_type, identity_phone_id = :identity_phone_id,
+                identity_value = :identity_value,
                 username = :username, display_name = :display_name,
                 external_account_id = :external_account_id, account_url = :account_url, login_url = :login_url,
                 status = :status, account_type = :account_type, created_date = :created_date,
@@ -201,6 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email_id' => $emailId !== 0 ? $emailId : null,
                 'identity_type' => $form['identity_type'],
                 'identity_phone_id' => $identityPhoneId !== 0 ? $identityPhoneId : null,
+                'identity_value' => $form['identity_value'] !== '' ? $form['identity_value'] : null,
                 'username' => $form['username'] !== '' ? $form['username'] : null,
                 'display_name' => $form['display_name'] !== '' ? $form['display_name'] : null,
                 'external_account_id' => $form['external_account_id'] !== '' ? $form['external_account_id'] : null,
@@ -273,11 +276,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = csrfToken();
-$pageTitle = t('accounts.edit_heading', ['service' => $account['service_name'], 'email' => $account['email_address']]);
+$pageTitle = t('accounts.edit_heading', ['service' => $account['service_name'], 'email' => accountDisplayIdentity($account)]);
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h4 mb-0"><?= e(t('accounts.edit_heading', ['service' => $account['service_name'], 'email' => $account['email_address']])) ?></h1>
+    <h1 class="h4 mb-0"><?= e(t('accounts.edit_heading', ['service' => $account['service_name'], 'email' => accountDisplayIdentity($account)])) ?></h1>
     <a href="view.php?id=<?= (int) $id ?>" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_profile')) ?></a>
 </div>
 
@@ -329,6 +332,10 @@ require __DIR__ . '/../../includes/header.php';
                         <option value="<?= (int) $ph['id'] ?>" <?= $form['identity_phone_id'] === (string) $ph['id'] ? 'selected' : '' ?>><?= e($ph['phone_number']) ?><?= $ph['label'] ? ' (' . e($ph['label']) . ')' : '' ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="col-md-4" id="identity-other-group" style="display:none;">
+                <label class="form-label"><?= e(t('accounts.field_identity_value')) ?></label>
+                <input type="text" name="identity_value" class="form-control" value="<?= e($form['identity_value']) ?>" placeholder="<?= e(t('accounts.identity_value_placeholder')) ?>">
             </div>
             <div class="col-md-4">
                 <label class="form-label"><?= e(t('common.field_username')) ?></label>
@@ -587,13 +594,15 @@ require __DIR__ . '/../../includes/header.php';
     var identitySelect = document.getElementById('identity_type');
     var emailGroup = document.getElementById('identity-email-group');
     var phoneGroup = document.getElementById('identity-phone-group');
-    if (!identitySelect || !emailGroup || !phoneGroup) {
+    var otherGroup = document.getElementById('identity-other-group');
+    if (!identitySelect || !emailGroup || !phoneGroup || !otherGroup) {
         return;
     }
     function update() {
         var type = identitySelect.value;
         emailGroup.style.display = type === 'email' ? '' : 'none';
         phoneGroup.style.display = type === 'phone' ? '' : 'none';
+        otherGroup.style.display = type === 'other' ? '' : 'none';
     }
     identitySelect.addEventListener('change', update);
     update();

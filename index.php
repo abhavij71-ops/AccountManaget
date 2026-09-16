@@ -182,7 +182,7 @@ require __DIR__ . '/includes/header.php';
                                     — <a href="<?= e(entityProfileUrl($h['entity_type'], (int) $h['entity_id'])) ?>"><?= e($label) ?></a>
                                 <?php endif; ?>
                             </div>
-                            <span class="text-muted small"><?= e($h['created_at']) ?></span>
+                            <span class="text-muted small"><?= e(formatDate($h['created_at'], true)) ?></span>
                         </li>
                     <?php endforeach; ?>
                 </ul>

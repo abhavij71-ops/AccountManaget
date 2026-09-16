@@ -25,9 +25,12 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="col-lg-6">
         <div class="card am-card h-100">
-            <div class="card-header bg-white fw-bold">Export</div>
+            <div class="card-header bg-white fw-bold"><?= e(t('export.title')) ?></div>
             <div class="card-body">
-                <p class="text-muted small mb-0"><?= e(t('ie.export_description')) ?></p>
+                <p class="text-muted small">
+                    <?= e(t('ie.export_description')) ?>
+                </p>
+                <a href="modules/export/index.php" class="btn btn-primary"><?= e(t('ie.start_export')) ?></a>
             </div>
         </div>
     </div>

@@ -226,8 +226,8 @@ require __DIR__ . '/../../includes/header.php';
                     <dt class="col-5"><?= e(t('common.field_display_name')) ?></dt><dd class="col-7"><?= dashOrValue($email['display_name']) ?></dd>
                     <dt class="col-5"><?= e(t('emails.view_provider')) ?></dt><dd class="col-7"><?= dashOrValue($email['provider']) ?></dd>
                     <dt class="col-5"><?= e(t('emails.view_purpose')) ?></dt><dd class="col-7"><?= dashOrValue($email['purpose']) ?></dd>
-                    <dt class="col-5"><?= e(t('common.field_created_date')) ?></dt><dd class="col-7"><?= dashOrValue($email['created_date']) ?></dd>
-                    <dt class="col-5"><?= e(t('common.field_last_verified')) ?></dt><dd class="col-7"><?= dashOrValue($email['last_verified']) ?></dd>
+                    <dt class="col-5"><?= e(t('common.field_created_date')) ?></dt><dd class="col-7"><?= dashOrValue(formatDate($email['created_date'])) ?></dd>
+                    <dt class="col-5"><?= e(t('common.field_last_verified')) ?></dt><dd class="col-7"><?= dashOrValue(formatDate($email['last_verified'])) ?></dd>
                 </dl>
             </div>
         </div>
@@ -386,7 +386,7 @@ require __DIR__ . '/../../includes/header.php';
                     <li class="mb-2 pb-2 border-bottom">
                         <div class="d-flex justify-content-between">
                             <strong><?= e(historyActionLabel($h['action'])) ?></strong>
-                            <span class="text-muted small"><?= e($h['created_at']) ?></span>
+                            <span class="text-muted small"><?= e(formatDate($h['created_at'], true)) ?></span>
                         </div>
                         <?php if ($h['field_name'] || $h['old_value'] !== null || $h['new_value'] !== null): ?>
                             <div class="small text-muted">

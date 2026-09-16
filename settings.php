@@ -11,6 +11,26 @@ $user = currentUser();
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = (string) ($_POST['action'] ?? 'change_password');
+
+    if ($action === 'download_backup') {
+        if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+            flashSet('danger', t('msg.invalid_request'));
+            header('Location: settings.php');
+            exit;
+        }
+        // requireLogin() now re-verifies is_active on every request (see includes/auth.php),
+        // so a deactivated account's session can no longer reach this far — no local re-check needed.
+        $filename = 'account-manager-backup-' . date('Y-m-d-His') . '.sqlite';
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . filesize(DB_PATH));
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        readfile(DB_PATH);
+        exit;
+    }
+
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $errors[] = t('msg.invalid_request');
     }
@@ -37,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
         $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
         $stmt->execute([$newHash, currentUserId()]);
+        session_regenerate_id(true);
         flashSet('success', t('settings.password_changed_success'));
         header('Location: settings.php');
         exit;
@@ -58,6 +79,18 @@ require __DIR__ . '/includes/header.php';
                     <dt class="col-5"><?= e(t('common.field_username')) ?></dt><dd class="col-7"><?= e($user['username'] ?? '') ?></dd>
                     <dt class="col-5"><?= e(t('settings.field_full_name')) ?></dt><dd class="col-7"><?= dashOrValue($user['full_name'] ?? null) ?></dd>
                 </dl>
+            </div>
+        </div>
+
+        <div class="card am-card mb-3">
+            <div class="card-header bg-white fw-bold"><?= e(t('settings.backup_title')) ?></div>
+            <div class="card-body">
+                <p class="text-muted small"><?= e(t('settings.backup_description')) ?></p>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="action" value="download_backup">
+                    <button type="submit" class="btn btn-outline-primary"><?= e(t('settings.download_backup_button')) ?></button>
+                </form>
             </div>
         </div>
     </div>

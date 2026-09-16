@@ -305,7 +305,7 @@ return [
 
     'ie.import_description' => 'اطلاعات Emails، Services، Phones یا Accounts را از یک فایل CSV وارد کنید. قبل از نوشتن هر تغییری، پیش‌نمایش، اعتبارسنجی و تشخیص موارد تکراری انجام می‌شود و هیچ رکورد موجودی بدون تأیید صریح شما بازنویسی نخواهد شد.',
     'ie.start_import' => 'شروع Import',
-    'ie.export_description' => 'خروجی گرفتن از Emails، Accounts، Services، Subscriptions و گزارش امنیتی در فاز بعد اضافه می‌شود.',
+    'ie.export_description' => 'خروجی CSV از Emails، Services، Accounts، Phones یا Subscriptions بگیرید. خروجی گزارش‌های امنیتی در فاز بعد اضافه می‌شود.',
 
     'import.cannot_read_file' => 'امکان خواندن فایل وجود نداشت.',
     'import.file_empty' => 'فایل خالی است.',
@@ -626,4 +626,34 @@ return [
     'phones.field_port_out_lock' => 'قفل انتقال شماره (Port-out Lock)',
     'phones.field_carrier' => 'اپراتور',
     'phones.field_esim' => 'eSIM',
+
+    'export.title' => 'خروجی',
+    'ie.start_export' => 'شروع خروجی',
+    'export.select_entity' => 'داده‌ای که می‌خواهید خروجی گرفته شود را انتخاب کنید.',
+    'export.field_entity_type' => 'نوع داده',
+    'export.entity_subscriptions' => 'Subscriptionها',
+    'export.download_button' => 'دانلود CSV',
+    'export.col_identity_type' => 'نوع هویت',
+
+    'app.calendar' => 'jalali',
+
+    'nav.review' => 'بازبینی',
+    'review.title' => 'بازبینی اکانت‌ها',
+    'review.progress' => 'بازبینی :current از :total',
+    'review.all_caught_up' => 'در حال حاضر اکانتی نیاز به بازبینی ندارد.',
+    'review.confirmed_button' => 'تأیید شد',
+    'review.changed_button' => 'تغییر کرده',
+    'review.gone_button' => 'دیگر ندارم',
+    'review.gone_confirm' => 'این اکانت به‌عنوان بسته‌شده (Closed) علامت‌گذاری شود؟ بعداً می‌توانید با ویرایش وضعیت، دوباره آن را باز کنید.',
+    'review.confirmed_success' => 'امروز به‌عنوان تأییدشده ثبت شد.',
+    'review.closed_success' => 'اکانت به‌عنوان بسته‌شده علامت‌گذاری شد.',
+    'settings.backup_title' => 'پشتیبان‌گیری',
+    'settings.backup_description' => 'یک نسخه کامل از فایل دیتابیس دانلود کنید. آن را جایی امن نگه دارید — شامل تمام اطلاعات حساب شماست.',
+    'settings.download_backup_button' => 'دانلود پشتیبان',
+
+    'common.records_count' => ':count رکورد',
+
+    'accounts.field_identity_value' => 'مقدار هویت',
+    'accounts.identity_value_placeholder' => 'مثلاً کد دعوت، شماره عضویت',
+    'na.account_other_identity_missing' => 'نوع هویت این اکانت «سایر» است، اما مقداری برای آن ثبت نشده است.',
 ];

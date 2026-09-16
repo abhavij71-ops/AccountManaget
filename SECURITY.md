@@ -22,6 +22,9 @@ If you find a field, form, or export that stores or exposes a secret, please rep
 - Destructive actions (Delete, Archive, Unlink) require an explicit client-side confirmation in addition to the server-side check
 - The `data/` directory (containing the SQLite database) is blocked from direct web access via `.htaccess`, with a `data/index.php` fallback in case `.htaccess` is ignored by the host
 - Session cookies are `HttpOnly`, `SameSite=Lax`, and marked `Secure` automatically when served over HTTPS
+- Login and language-switch redirect targets go through a shared whitelist (`safeInternalRedirect()` in `includes/auth.php`) that only allows a relative in-app `*.php` path, rejecting absolute URLs, scheme-relative (`//host`) URLs, and path traversal — preventing the post-login destination from being used as an open redirect
+- A deactivated or deleted account's session is invalidated on its very next request, not just at its next login — `requireLogin()` re-checks the user row on every request, and a password change immediately retires the old session ID (`session_regenerate_id()`)
+- Internal error detail (exception messages, stack traces, filesystem paths) is never shown to the browser; only a generic message is displayed while the real detail goes to the PHP error log. Controlled by `APP_DEBUG` in `config.php`, which defaults to `false` and should stay that way outside of local debugging
 
 ## Reporting a vulnerability
 

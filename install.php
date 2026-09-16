@@ -109,6 +109,7 @@ function installSchemaStatements(): array
             email_id INTEGER REFERENCES emails(id) ON DELETE RESTRICT,
             identity_type TEXT NOT NULL DEFAULT \'email\' CHECK (identity_type IN (\'email\',\'phone\',\'username\',\'other\')),
             identity_phone_id INTEGER REFERENCES phones(id) ON DELETE RESTRICT,
+            identity_value TEXT,
             username TEXT,
             display_name TEXT,
             external_account_id TEXT,

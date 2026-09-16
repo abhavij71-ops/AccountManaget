@@ -86,6 +86,10 @@ function evaluateAccountIssues(array $account, ?array $security, ?array $recover
         $issues[] = ['level' => 'Warning', 'message' => t('na.subscription_problem', ['label' => $label])];
     }
 
+    if (($account['identity_type'] ?? 'email') === 'other' && empty($account['identity_value'])) {
+        $issues[] = ['level' => 'Informational', 'message' => t('na.account_other_identity_missing')];
+    }
+
     if ($completeness < 50) {
         $issues[] = ['level' => 'Informational', 'message' => t('na.account_incomplete', ['pct' => $completeness])];
     }
@@ -171,7 +175,7 @@ function getNeedsAttentionItems(PDO $pdo): array
         $recovery = fetchAccountRecovery($pdo, (int) $accountId);
         $subscription = fetchSubscription($pdo, (int) $accountId);
         $completeness = calcAccountCompleteness($account, $security, $recovery);
-        $title = $account['service_name'] . ' — ' . ($account['username'] ?: $account['email_address']);
+        $title = $account['service_name'] . ' — ' . accountDisplayIdentity($account);
         foreach (evaluateAccountIssues($account, $security, $recovery, $subscription, $completeness) as $issue) {
             $items[] = $issue + [
                 'entity_type' => 'account',

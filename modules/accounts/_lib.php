@@ -1,16 +1,44 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * NOTE: email_address and phone_number are LEFT JOINed and so can both be
+ * NULL — accounts.email_id has been nullable since v1.5.0's Identity Anchor
+ * model (identity_type email/phone/username/other). Every consumer of this
+ * row must not assume email_address is present; see accountDisplayIdentity()
+ * for the safe way to get a human-readable label regardless of anchor type.
+ */
 function fetchAccountById(PDO $pdo, int $id): ?array
 {
-    $stmt = $pdo->prepare('SELECT a.*, s.service_name, e.email_address
+    $stmt = $pdo->prepare('SELECT a.*, s.service_name, e.email_address, p.phone_number
         FROM accounts a
         JOIN services s ON s.id = a.service_id
-        JOIN emails e ON e.id = a.email_id
+        LEFT JOIN emails e ON e.id = a.email_id
+        LEFT JOIN phones p ON p.id = a.identity_phone_id
         WHERE a.id = ? LIMIT 1');
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     return $row ?: null;
+}
+
+/**
+ * Best-effort human-readable label for an account: username if set, else
+ * whatever fetchAccountById() resolved as its identity anchor (email_address
+ * for identity_type 'email', phone_number for 'phone'), else a safe
+ * id-based fallback for 'other' (which has no anchor field at all) or any
+ * row missing the data its own identity_type promises.
+ */
+function accountDisplayIdentity(array $account): string
+{
+    if (!empty($account['username'])) {
+        return $account['username'];
+    }
+    $anchor = match ($account['identity_type'] ?? 'email') {
+        'phone' => $account['phone_number'] ?? null,
+        'other' => null,
+        default => $account['email_address'] ?? null,
+    };
+    return $anchor ?? ('#' . $account['id']);
 }
 
 function fetchAccountSecurity(PDO $pdo, int $accountId): ?array

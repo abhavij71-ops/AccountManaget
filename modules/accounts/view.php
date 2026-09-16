@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         flashSet('success', t('common.phone_unlinked'));
     } elseif ($action === 'delete') {
-        $label = $account['service_name'] . ' — ' . ($account['username'] ?: $account['email_address']);
+        $label = $account['service_name'] . ' — ' . accountDisplayIdentity($account);
         $pdo->prepare('DELETE FROM accounts WHERE id = ?')->execute([$id]);
         $pdo->prepare('DELETE FROM taggables WHERE entity_type = ? AND entity_id = ?')->execute(['account', $id]);
         flashSet('success', t('accounts.deleted_success', ['name' => $label]));
@@ -170,7 +170,7 @@ $openLoginUrl = $account['login_url'] ?: $account['account_url'];
 $credentialLooksLikeUrl = $security && !empty($security['credential_reference']) && preg_match('/^https?:\/\//i', (string) $security['credential_reference']);
 
 $csrf = csrfToken();
-$pageTitle = $account['service_name'] . ' — ' . ($account['username'] ?: $account['email_address']);
+$pageTitle = $account['service_name'] . ' — ' . accountDisplayIdentity($account);
 require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
@@ -178,7 +178,7 @@ require __DIR__ . '/../../includes/header.php';
         <h1 class="h4 mb-1">
             <a href="../services/view.php?id=<?= (int) $account['service_id'] ?>" class="text-decoration-none"><?= e($account['service_name']) ?></a>
             <span class="text-muted">—</span>
-            <?= e($account['username'] ?: $account['email_address']) ?>
+            <?= e(accountDisplayIdentity($account)) ?>
             <?php if ((int) $account['is_archived'] === 1): ?>
                 <span class="badge bg-secondary"><?= e(t('accounts.archived_short_badge')) ?></span>
             <?php endif; ?>
@@ -196,7 +196,7 @@ require __DIR__ . '/../../includes/header.php';
             <?php elseif ($identityType === 'username'): ?>
                 <span class="small"><?= e($account['username'] ?: '—') ?></span>
             <?php elseif ($identityType === 'other'): ?>
-                <span class="small text-muted"><?= e(t('accounts.identity_type_other')) ?></span>
+                <span class="small<?= empty($account['identity_value']) ? ' text-muted' : '' ?>"><?= empty($account['identity_value']) ? '—' : e($account['identity_value']) ?></span>
             <?php elseif (!empty($account['email_id'])): ?>
                 <a href="../emails/view.php?id=<?= (int) $account['email_id'] ?>" class="small"><?= e($account['email_address']) ?></a>
             <?php else: ?>
@@ -206,7 +206,7 @@ require __DIR__ . '/../../includes/header.php';
     </div>
     <div class="text-end">
         <div class="text-muted small mb-1"><?= e(t('common.profile_completeness')) ?>: <?= (int) $completeness ?>%</div>
-        <div class="text-muted small"><?= e(t('common.field_last_verified')) ?>: <?= dashOrValue($account['last_verified']) ?></div>
+        <div class="text-muted small"><?= e(t('common.field_last_verified')) ?>: <?= dashOrValue(formatDate($account['last_verified'])) ?></div>
     </div>
 </div>
 
@@ -248,8 +248,8 @@ require __DIR__ . '/../../includes/header.php';
                     <dt class="col-5"><?= e(t('accounts.view_external_id')) ?></dt><dd class="col-7"><?= dashOrValue($account['external_account_id']) ?></dd>
                     <dt class="col-5"><?= e(t('accounts.view_account_url')) ?></dt><dd class="col-7"><?= $account['account_url'] ? '<a href="' . e($account['account_url']) . '" target="_blank" rel="noopener">' . e($account['account_url']) . '</a>' : dashOrValue(null) ?></dd>
                     <dt class="col-5"><?= e(t('services.view_login_url')) ?></dt><dd class="col-7"><?= $account['login_url'] ? '<a href="' . e($account['login_url']) . '" target="_blank" rel="noopener">' . e($account['login_url']) . '</a>' : dashOrValue(null) ?></dd>
-                    <dt class="col-5"><?= e(t('common.field_created_date')) ?></dt><dd class="col-7"><?= dashOrValue($account['created_date']) ?></dd>
-                    <dt class="col-5"><?= e(t('accounts.field_last_login')) ?></dt><dd class="col-7"><?= dashOrValue($account['last_login']) ?></dd>
+                    <dt class="col-5"><?= e(t('common.field_created_date')) ?></dt><dd class="col-7"><?= dashOrValue(formatDate($account['created_date'])) ?></dd>
+                    <dt class="col-5"><?= e(t('accounts.field_last_login')) ?></dt><dd class="col-7"><?= dashOrValue(formatDate($account['last_login'])) ?></dd>
                 </dl>
             </div>
         </div>
@@ -369,8 +369,8 @@ require __DIR__ . '/../../includes/header.php';
                                 <?= dashOrValue(null) ?>
                             <?php endif; ?>
                         </dd>
-                        <dt class="col-5"><?= e(t('accounts.field_start_date')) ?></dt><dd class="col-7"><?= dashOrValue($subscription['start_date'] ?? null) ?></dd>
-                        <dt class="col-5"><?= e(t('accounts.view_renewal_date')) ?></dt><dd class="col-7"><?= dashOrValue($subscription['renewal_date'] ?? null) ?></dd>
+                        <dt class="col-5"><?= e(t('accounts.field_start_date')) ?></dt><dd class="col-7"><?= dashOrValue(formatDate($subscription['start_date'] ?? null)) ?></dd>
+                        <dt class="col-5"><?= e(t('accounts.view_renewal_date')) ?></dt><dd class="col-7"><?= dashOrValue(formatDate($subscription['renewal_date'] ?? null)) ?></dd>
                         <dt class="col-5"><?= e(t('accounts.field_auto_renewal')) ?></dt>
                         <dd class="col-7">
                             <?php
@@ -381,7 +381,10 @@ require __DIR__ . '/../../includes/header.php';
                     </dl>
                     <?php if ($subType === 'Trial' && (!empty($subscription['start_date']) || !empty($subscription['renewal_date']))): ?>
                         <div class="alert alert-info mt-3 mb-0 py-2 small">
-                            <?= e(t('accounts.trial_period_note', ['start' => $subscription['start_date'] ?? '—', 'end' => $subscription['renewal_date'] ?? '—'])) ?>
+                            <?= e(t('accounts.trial_period_note', [
+                                'start' => $subscription['start_date'] ? formatDate($subscription['start_date']) : '—',
+                                'end' => $subscription['renewal_date'] ? formatDate($subscription['renewal_date']) : '—',
+                            ])) ?>
                         </div>
                     <?php endif; ?>
                 <?php endif; ?>
@@ -501,7 +504,7 @@ require __DIR__ . '/../../includes/header.php';
                     <li class="mb-2 pb-2 border-bottom">
                         <div class="d-flex justify-content-between">
                             <strong><?= e(historyActionLabel($h['action'])) ?></strong>
-                            <span class="text-muted small"><?= e($h['created_at']) ?></span>
+                            <span class="text-muted small"><?= e(formatDate($h['created_at'], true)) ?></span>
                         </div>
                         <?php if ($h['field_name'] || $h['old_value'] !== null || $h['new_value'] !== null): ?>
                             <div class="small text-muted">

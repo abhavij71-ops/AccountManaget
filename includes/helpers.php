@@ -191,6 +191,98 @@ function dashOrValue(?string $value): string
     return e($value);
 }
 
+/**
+ * Converts a stored date/datetime for DISPLAY ONLY, per the active language's
+ * 'app.calendar' ('jalali' for fa, 'gregorian' for en/ar).
+ *
+ * CRITICAL: every value ever passed in here — and everywhere else in the
+ * codebase — is Gregorian ISO (`Y-m-d` or `Y-m-d H:i:s`, SQLite's own
+ * `datetime('now')` format). That never changes: database storage stays
+ * Gregorian ISO, and so do `<input type="date">` values (the HTML date input
+ * itself requires ISO Gregorian regardless of UI language — never feed this
+ * function's output back into a date input). This function only ever
+ * produces a human-facing string for reading, never a value for writing back.
+ *
+ * Prefers IntlDateFormatter (accurate ICU Persian-calendar conversion) when
+ * the intl extension is loaded; falls back to a pure-PHP Gregorian->Jalali
+ * algorithm otherwise so Jalali display still works on a minimal PHP build.
+ * Output is always Latin digits / `yyyy/mm/dd` in both paths, so the display
+ * format doesn't change depending on what's installed on the server.
+ */
+function formatDate(?string $iso, bool $withTime = false): string
+{
+    if ($iso === null || trim($iso) === '') {
+        return '';
+    }
+
+    $ts = strtotime($iso);
+    if ($ts === false) {
+        return $iso;
+    }
+
+    $calendar = t('app.calendar');
+    $pattern = $withTime ? 'yyyy/MM/dd HH:mm' : 'yyyy/MM/dd';
+
+    if (extension_loaded('intl')) {
+        $locale = $calendar === 'jalali' ? 'fa_IR@calendar=persian;nu=latn' : (currentLanguage() === 'ar' ? 'ar@nu=latn' : 'en@nu=latn');
+        $formatter = new IntlDateFormatter(
+            $locale,
+            IntlDateFormatter::NONE,
+            IntlDateFormatter::NONE,
+            date_default_timezone_get(),
+            $calendar === 'jalali' ? IntlDateFormatter::TRADITIONAL : IntlDateFormatter::GREGORIAN,
+            $pattern
+        );
+        $formatted = $formatter->format($ts);
+        if ($formatted !== false) {
+            return $formatted;
+        }
+        // IntlDateFormatter failed unexpectedly (e.g. bad ICU data) — fall through to the pure-PHP paths below.
+    }
+
+    if ($calendar === 'jalali') {
+        [$jy, $jm, $jd] = gregorianToJalali((int) date('Y', $ts), (int) date('n', $ts), (int) date('j', $ts));
+        $datePart = sprintf('%04d/%02d/%02d', $jy, $jm, $jd);
+        return $withTime ? $datePart . ' ' . date('H:i', $ts) : $datePart;
+    }
+
+    return date($withTime ? 'Y/m/d H:i' : 'Y/m/d', $ts);
+}
+
+/**
+ * Pure-PHP Gregorian->Jalali (Solar Hijri) date conversion — the standard
+ * public-domain algorithm (jdf.scr.ir), used only as formatDate()'s fallback
+ * when the intl extension isn't available.
+ *
+ * @return array{0:int,1:int,2:int} [jalaliYear, jalaliMonth, jalaliDay]
+ */
+function gregorianToJalali(int $gy, int $gm, int $gd): array
+{
+    $gDaysInMonthCumulative = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+
+    $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+    $days = 355666 + (365 * $gy) + intdiv($gy2 + 3, 4) - intdiv($gy2 + 99, 100) + intdiv($gy2 + 399, 400)
+        + $gd + $gDaysInMonthCumulative[$gm - 1];
+
+    $jy = -1595 + (33 * intdiv($days, 12053));
+    $days %= 12053;
+    $jy += 4 * intdiv($days, 1461);
+    $days %= 1461;
+    if ($days > 365) {
+        $jy += intdiv($days - 1, 365);
+        $days = ($days - 1) % 365;
+    }
+    if ($days < 186) {
+        $jm = 1 + intdiv($days, 31);
+        $jd = 1 + ($days % 31);
+    } else {
+        $jm = 7 + intdiv($days - 186, 30);
+        $jd = 1 + (($days - 186) % 30);
+    }
+
+    return [$jy, $jm, $jd];
+}
+
 function flashSet(string $type, string $message): void
 {
     $_SESSION['flash'] = ['type' => $type, 'message' => $message];

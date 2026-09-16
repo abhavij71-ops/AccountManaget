@@ -71,19 +71,24 @@ $historyRows = $stmt->fetchAll();
 
 $csrf = csrfToken();
 
-$stmt = $pdo->prepare('SELECT a.id, a.username, a.status, a.last_verified, e.id AS email_id, e.email_address,
+// LEFT JOINs (not INNER) — an account's email_id/identity_phone_id can legitimately be
+// null under the Identity Anchor model (phone/username/other anchors), and those
+// accounts must still be listed here. Matches the pattern in search-api.php.
+$stmt = $pdo->prepare("SELECT a.id, a.username, a.status, a.last_verified, a.identity_type, a.identity_phone_id,
+        e.id AS email_id, e.email_address, p.phone_number,
         sub.plan, sub.type AS sub_type, acs.twofa_status
     FROM accounts a
-    JOIN emails e ON e.id = a.email_id
+    LEFT JOIN emails e ON e.id = a.email_id
+    LEFT JOIN phones p ON p.id = a.identity_phone_id
     LEFT JOIN subscriptions sub ON sub.account_id = a.id
     LEFT JOIN account_security acs ON acs.account_id = a.id
     WHERE a.service_id = ?
-    ORDER BY e.email_address');
+    ORDER BY COALESCE(e.email_address, p.phone_number, a.username, '')");
 $stmt->execute([$id]);
 $accounts = $stmt->fetchAll();
 
 $accountsCount = count($accounts);
-$emailsCount = count(array_unique(array_column($accounts, 'email_id')));
+$emailsCount = count(array_unique(array_filter(array_column($accounts, 'email_id'))));
 $paidCount = count(array_filter($accounts, static fn ($a) => $a['sub_type'] === 'Paid'));
 $issuesCount = count(array_filter($accounts, static fn ($a) => in_array($a['status'], ['Suspended', 'Disabled'], true) || $a['twofa_status'] === 'Disabled'));
 
@@ -189,16 +194,32 @@ require __DIR__ . '/../../includes/header.php';
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
-                    <thead><tr><th><?= e(t('accounts.th_email')) ?></th><th><?= e(t('accounts.th_username')) ?></th><th><?= e(t('common.field_status')) ?></th><th><?= e(t('accounts.th_plan')) ?></th><th>2FA</th><th><?= e(t('common.field_last_verified')) ?></th></tr></thead>
+                    <thead><tr><th><?= e(t('accounts.th_identity')) ?></th><th><?= e(t('accounts.th_username')) ?></th><th><?= e(t('common.field_status')) ?></th><th><?= e(t('accounts.th_plan')) ?></th><th>2FA</th><th><?= e(t('common.field_last_verified')) ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($accounts as $acc): ?>
                         <tr>
-                            <td><a href="../emails/view.php?id=<?= (int) $acc['email_id'] ?>"><?= e($acc['email_address']) ?></a></td>
+                            <td>
+                                <?php if ($acc['identity_type'] === 'phone'): ?>
+                                    <?php if ($acc['identity_phone_id']): ?>
+                                        <a href="../phones/view.php?id=<?= (int) $acc['identity_phone_id'] ?>"><?= e($acc['phone_number']) ?></a>
+                                    <?php else: ?>
+                                        <?= dashOrValue(null) ?>
+                                    <?php endif; ?>
+                                <?php elseif ($acc['identity_type'] === 'username'): ?>
+                                    <?= dashOrValue($acc['username']) ?>
+                                <?php elseif ($acc['identity_type'] === 'other'): ?>
+                                    <span class="text-muted"><?= e(t('accounts.identity_type_other')) ?></span>
+                                <?php elseif ($acc['email_id']): ?>
+                                    <a href="../emails/view.php?id=<?= (int) $acc['email_id'] ?>"><?= e($acc['email_address']) ?></a>
+                                <?php else: ?>
+                                    <?= dashOrValue(null) ?>
+                                <?php endif; ?>
+                            </td>
                             <td><a href="../accounts/view.php?id=<?= (int) $acc['id'] ?>"><?= $acc['username'] ? e($acc['username']) : e(t('emails.view_account')) ?></a></td>
                             <td><?= renderBadge($acc['status'], ACCOUNT_STATUSES) ?></td>
                             <td><?= dashOrValue($acc['plan']) ?></td>
                             <td><?= renderBadge($acc['twofa_status'], SECURITY_STATES) ?></td>
-                            <td><?= dashOrValue($acc['last_verified']) ?></td>
+                            <td><?= dashOrValue(formatDate($acc['last_verified'])) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -250,7 +271,7 @@ require __DIR__ . '/../../includes/header.php';
                     <li class="mb-2 pb-2 border-bottom">
                         <div class="d-flex justify-content-between">
                             <strong><?= e(historyActionLabel($h['action'])) ?></strong>
-                            <span class="text-muted small"><?= e($h['created_at']) ?></span>
+                            <span class="text-muted small"><?= e(formatDate($h['created_at'], true)) ?></span>
                         </div>
                         <?php if ($h['field_name'] || $h['old_value'] !== null || $h['new_value'] !== null): ?>
                             <div class="small text-muted">

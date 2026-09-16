@@ -38,8 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $upd = db()->prepare('UPDATE users SET last_login_at = datetime(\'now\') WHERE id = ?');
             $upd->execute([$user['id']]);
 
-            $target = $redirect !== '' ? $redirect : appUrl('index.php');
-            header('Location: ' . $target);
+            header('Location: ' . appUrl(safeInternalRedirect($redirect)));
             exit;
         }
     }

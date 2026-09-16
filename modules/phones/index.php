@@ -73,6 +73,8 @@ require __DIR__ . '/../../includes/header.php';
     </div>
 </form>
 
+<p class="text-muted small mb-2"><?= e(t('common.records_count', ['count' => $filteredCount])) ?></p>
+
 <?php if (!$totalCount): ?>
     <div class="card am-card">
         <div class="card-body text-center py-5">

@@ -13,6 +13,7 @@ $form = [
     'identity_type' => 'email',
     'email_id' => '',
     'identity_phone_id' => '',
+    'identity_value' => '',
     'username' => '',
     'status' => 'Active',
     'plan' => '',
@@ -64,13 +65,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, username, status, notes)
-                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :username, :status, :notes)');
+            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, identity_value, username, status, notes)
+                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :status, :notes)');
             $stmt->execute([
                 'service_id' => $serviceId,
                 'email_id' => $emailId !== 0 ? $emailId : null,
                 'identity_type' => $form['identity_type'],
                 'identity_phone_id' => $identityPhoneId !== 0 ? $identityPhoneId : null,
+                'identity_value' => $form['identity_value'] !== '' ? $form['identity_value'] : null,
                 'username' => $form['username'] !== '' ? $form['username'] : null,
                 'status' => $form['status'],
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
@@ -139,21 +141,39 @@ require __DIR__ . '/../../includes/header.php';
             </div>
             <div class="col-md-4">
                 <label class="form-label"><?= e(t('accounts.field_service_required')) ?></label>
-                <select name="service_id" class="form-select" required>
-                    <option value=""><?= e(t('common.select_placeholder')) ?></option>
-                    <?php foreach ($services as $s): ?>
-                        <option value="<?= (int) $s['id'] ?>" <?= $form['service_id'] === (string) $s['id'] ? 'selected' : '' ?>><?= e($s['service_name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <div class="input-group">
+                    <select name="service_id" id="service_id" class="form-select" required>
+                        <option value=""><?= e(t('common.select_placeholder')) ?></option>
+                        <?php foreach ($services as $s): ?>
+                            <option value="<?= (int) $s['id'] ?>" <?= $form['service_id'] === (string) $s['id'] ? 'selected' : '' ?>><?= e($s['service_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="button" class="btn btn-outline-secondary" id="new-service-btn">+ New</button>
+                </div>
+                <div id="new-service-panel" class="input-group input-group-sm mt-2" style="display:none;">
+                    <input type="text" id="new-service-name" class="form-control" placeholder="Service name">
+                    <button type="button" class="btn btn-primary" id="new-service-save"><?= e(t('common.add')) ?></button>
+                    <button type="button" class="btn btn-outline-secondary" id="new-service-cancel"><?= e(t('common.cancel')) ?></button>
+                </div>
+                <div id="new-service-error" class="text-danger small mt-1"></div>
             </div>
             <div class="col-md-4" id="identity-email-group">
                 <label class="form-label"><?= e(t('accounts.field_email_required')) ?></label>
-                <select name="email_id" class="form-select">
-                    <option value=""><?= e(t('common.select_placeholder')) ?></option>
-                    <?php foreach ($emails as $em): ?>
-                        <option value="<?= (int) $em['id'] ?>" <?= $form['email_id'] === (string) $em['id'] ? 'selected' : '' ?>><?= e($em['email_address']) ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <div class="input-group">
+                    <select name="email_id" id="email_id" class="form-select">
+                        <option value=""><?= e(t('common.select_placeholder')) ?></option>
+                        <?php foreach ($emails as $em): ?>
+                            <option value="<?= (int) $em['id'] ?>" <?= $form['email_id'] === (string) $em['id'] ? 'selected' : '' ?>><?= e($em['email_address']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="button" class="btn btn-outline-secondary" id="new-email-btn">+ New</button>
+                </div>
+                <div id="new-email-panel" class="input-group input-group-sm mt-2" style="display:none;">
+                    <input type="email" id="new-email-address" class="form-control" placeholder="name@example.com">
+                    <button type="button" class="btn btn-primary" id="new-email-save"><?= e(t('common.add')) ?></button>
+                    <button type="button" class="btn btn-outline-secondary" id="new-email-cancel"><?= e(t('common.cancel')) ?></button>
+                </div>
+                <div id="new-email-error" class="text-danger small mt-1"></div>
             </div>
             <div class="col-md-4" id="identity-phone-group" style="display:none;">
                 <label class="form-label"><?= e(t('accounts.field_identity_phone_required')) ?></label>
@@ -163,6 +183,10 @@ require __DIR__ . '/../../includes/header.php';
                         <option value="<?= (int) $ph['id'] ?>" <?= $form['identity_phone_id'] === (string) $ph['id'] ? 'selected' : '' ?>><?= e($ph['phone_number']) ?><?= $ph['label'] ? ' (' . e($ph['label']) . ')' : '' ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="col-md-4" id="identity-other-group" style="display:none;">
+                <label class="form-label"><?= e(t('accounts.field_identity_value')) ?></label>
+                <input type="text" name="identity_value" class="form-control" value="<?= e($form['identity_value']) ?>" placeholder="<?= e(t('accounts.identity_value_placeholder')) ?>">
             </div>
             <div class="col-md-6">
                 <label class="form-label"><?= e(t('common.field_username')) ?></label>
@@ -191,16 +215,107 @@ require __DIR__ . '/../../includes/header.php';
     var identitySelect = document.getElementById('identity_type');
     var emailGroup = document.getElementById('identity-email-group');
     var phoneGroup = document.getElementById('identity-phone-group');
-    if (!identitySelect || !emailGroup || !phoneGroup) {
+    var otherGroup = document.getElementById('identity-other-group');
+    if (!identitySelect || !emailGroup || !phoneGroup || !otherGroup) {
         return;
     }
     function update() {
         var type = identitySelect.value;
         emailGroup.style.display = type === 'email' ? '' : 'none';
         phoneGroup.style.display = type === 'phone' ? '' : 'none';
+        otherGroup.style.display = type === 'other' ? '' : 'none';
     }
     identitySelect.addEventListener('change', update);
     update();
+})();
+(function () {
+    var csrfInput = document.querySelector('input[name="csrf_token"]');
+    var csrfToken = csrfInput ? csrfInput.value : '';
+
+    function setupInlineCreate(opts) {
+        var btn = document.getElementById(opts.btnId);
+        var panel = document.getElementById(opts.panelId);
+        var input = document.getElementById(opts.inputId);
+        var saveBtn = document.getElementById(opts.saveId);
+        var cancelBtn = document.getElementById(opts.cancelId);
+        var errorEl = document.getElementById(opts.errorId);
+        var select = document.getElementById(opts.selectId);
+        if (!btn || !panel || !input || !saveBtn || !cancelBtn || !errorEl || !select) {
+            return;
+        }
+
+        function closePanel() {
+            panel.style.display = 'none';
+            errorEl.textContent = '';
+            input.value = '';
+        }
+
+        btn.addEventListener('click', function () {
+            if (panel.style.display === 'none') {
+                panel.style.display = '';
+                errorEl.textContent = '';
+                input.focus();
+            } else {
+                closePanel();
+            }
+        });
+
+        cancelBtn.addEventListener('click', closePanel);
+
+        function save() {
+            var value = input.value.trim();
+            if (!value) {
+                return;
+            }
+            errorEl.textContent = '';
+            saveBtn.disabled = true;
+
+            var body = new URLSearchParams();
+            body.set('csrf_token', csrfToken);
+            body.set(opts.fieldName, value);
+
+            fetch(opts.url, { method: 'POST', body: body, credentials: 'same-origin' })
+                .then(function (res) {
+                    return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+                })
+                .then(function (result) {
+                    saveBtn.disabled = false;
+                    if (!result.ok || result.data.error) {
+                        errorEl.textContent = (result.data && result.data.error) || 'Error';
+                        return;
+                    }
+                    var option = document.createElement('option');
+                    option.value = result.data.id;
+                    option.textContent = result.data[opts.labelKey];
+                    select.appendChild(option);
+                    select.value = String(result.data.id);
+                    closePanel();
+                })
+                .catch(function () {
+                    saveBtn.disabled = false;
+                    errorEl.textContent = 'Error';
+                });
+        }
+
+        saveBtn.addEventListener('click', save);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                save();
+            }
+        });
+    }
+
+    setupInlineCreate({
+        btnId: 'new-service-btn', panelId: 'new-service-panel', inputId: 'new-service-name',
+        saveId: 'new-service-save', cancelId: 'new-service-cancel', errorId: 'new-service-error',
+        selectId: 'service_id', url: '../services/create-inline.php', fieldName: 'service_name', labelKey: 'name',
+    });
+    setupInlineCreate({
+        btnId: 'new-email-btn', panelId: 'new-email-panel', inputId: 'new-email-address',
+        saveId: 'new-email-save', cancelId: 'new-email-cancel', errorId: 'new-email-error',
+        selectId: 'email_id', url: '../emails/create-inline.php', fieldName: 'email_address', labelKey: 'address',
+    });
 })();
 </script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

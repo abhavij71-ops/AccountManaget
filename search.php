@@ -42,17 +42,22 @@ if ($q !== '') {
     $stmt->execute(['q' => $like]);
     $phoneResults = $stmt->fetchAll();
 
-    $stmt = $pdo->prepare("SELECT a.id, a.username, a.display_name, a.external_account_id, a.status,
-            s.id AS service_id, s.service_name, e.id AS email_id, e.email_address
+    // LEFT JOINs (not INNER) — an account's email_id/identity_phone_id can legitimately be
+    // null under the Identity Anchor model (phone/username/other anchors), and those
+    // accounts must still be findable here. Matches the pattern in search-api.php.
+    $stmt = $pdo->prepare("SELECT a.id, a.username, a.display_name, a.external_account_id, a.status, a.identity_type, a.identity_value,
+            s.id AS service_id, s.service_name, e.id AS email_id, e.email_address, p.phone_number
         FROM accounts a
         JOIN services s ON s.id = a.service_id
-        JOIN emails e ON e.id = a.email_id
+        LEFT JOIN emails e ON e.id = a.email_id
+        LEFT JOIN phones p ON p.id = a.identity_phone_id
         WHERE a.username LIKE :q OR a.display_name LIKE :q OR a.external_account_id LIKE :q OR a.notes LIKE :q
+           OR p.phone_number LIKE :q OR a.identity_value LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
                       WHERE tg.entity_type = 'account' AND tg.entity_id = a.id AND t.name LIKE :q)
            OR EXISTS (SELECT 1 FROM custom_fields cf
                       WHERE cf.account_id = a.id AND (cf.field_key LIKE :q OR cf.field_value LIKE :q))
-           OR EXISTS (SELECT 1 FROM payments p WHERE p.account_id = a.id AND p.payment_reference LIKE :q)
+           OR EXISTS (SELECT 1 FROM payments p2 WHERE p2.account_id = a.id AND p2.payment_reference LIKE :q)
         ORDER BY a.username LIMIT 30");
     $stmt->execute(['q' => $like]);
     $accountResults = $stmt->fetchAll();
@@ -123,9 +128,17 @@ require __DIR__ . '/includes/header.php';
             <div class="card-header bg-white fw-bold"><?= e(t('accounts.title')) ?> (<?= count($accountResults) ?>)</div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($accountResults as $row): ?>
+                    <?php
+                    $identity = match ($row['identity_type']) {
+                        'phone' => (string) ($row['phone_number'] ?? ''),
+                        'username' => (string) ($row['username'] ?? ''),
+                        'other' => (string) ($row['identity_value'] ?? ''),
+                        default => (string) ($row['email_address'] ?? ''),
+                    };
+                    ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <a href="modules/accounts/view.php?id=<?= (int) $row['id'] ?>">
-                            <?= e($row['email_address']) ?>
+                            <?= $identity !== '' ? e($identity) : '<span class="text-muted fst-italic">—</span>' ?>
                             <span class="text-muted">&larr;</span>
                             <?= e($row['service_name']) ?>
                             <span class="text-muted">&larr;</span>

@@ -74,42 +74,100 @@ function normalizeHeaderName(string $name): string
 }
 
 /**
- * Reads a CSV file into headers + associative rows. Normalizes line endings
- * and strips a UTF-8 BOM (common from Excel exports) before parsing.
+ * Reads a comma-delimited CSV file into headers + associative rows.
+ * Thin wrapper over parseDelimitedFile() — kept as its own function (rather
+ * than folded into parseImportFile()) since it's the long-standing entry
+ * point existing call sites already use.
  */
 function parseCsvFile(string $path): array
 {
-    $content = file_get_contents($path);
-    if ($content === false) {
+    return parseDelimitedFile($path, ',');
+}
+
+/**
+ * Reads a tab-delimited TXT file into the same headers + associative rows
+ * shape as parseCsvFile(). Every later pipeline stage (mapping, preview,
+ * validation, duplicate detection, confirm, import — see importEntityFields(),
+ * validateImportRow(), detectDuplicateStatus(), importRow()) already operates
+ * on that shape without caring where it came from, so TXT needs no changes
+ * anywhere else in this file.
+ */
+function parseTxtFile(string $path): array
+{
+    return parseDelimitedFile($path, "\t");
+}
+
+/**
+ * Picks parseCsvFile() or parseTxtFile() by the uploaded file's extension —
+ * the single entry point the upload step should call so it doesn't need to
+ * know about delimiters itself.
+ */
+function parseImportFile(string $path, string $originalFilename): array
+{
+    $ext = strtolower((string) pathinfo($originalFilename, PATHINFO_EXTENSION));
+    return $ext === 'txt' ? parseTxtFile($path) : parseCsvFile($path);
+}
+
+/**
+ * Shared parsing logic behind parseCsvFile()/parseTxtFile(). Streams the file
+ * through fgetcsv() rather than splitting pre-read content on "\n" — a quoted
+ * field containing an embedded newline (routine for a Notes column exported
+ * from Excel) is a single fgetcsv() record spanning multiple physical lines,
+ * so it can no longer split the import into two corrupted rows the way a
+ * naive line-split does. Strips a UTF-8 BOM (common from Excel exports)
+ * right after opening, before the first fgetcsv() call. Row cap: 2000 data
+ * rows (header and blank lines don't count), same limit as before — the
+ * file_too_many_rows error still fires at row 2001, just discovered while
+ * streaming instead of after loading the whole file into memory up front.
+ */
+function parseDelimitedFile(string $path, string $delimiter): array
+{
+    $handle = fopen($path, 'rb');
+    if ($handle === false) {
         return ['headers' => [], 'rows' => [], 'error' => t('import.cannot_read_file')];
     }
 
-    if (str_starts_with($content, "\xEF\xBB\xBF")) {
-        $content = substr($content, 3);
+    if (fread($handle, 3) !== "\xEF\xBB\xBF") {
+        fseek($handle, 0);
     }
-    $content = str_replace(["\r\n", "\r"], "\n", $content);
-    $lines = array_filter(explode("\n", $content), static fn ($l) => trim($l) !== '');
-    $lines = array_values($lines);
 
-    if (!$lines) {
+    $isBlankRow = static fn (array $cols): bool => count($cols) === 1 && (($cols[0] ?? null) === null || trim((string) $cols[0]) === '');
+
+    $headers = null;
+    while (($cols = fgetcsv($handle, 0, $delimiter)) !== false) {
+        if ($isBlankRow($cols)) {
+            continue;
+        }
+        $headers = array_map(static fn ($h) => trim((string) $h), $cols);
+        break;
+    }
+
+    if ($headers === null) {
+        fclose($handle);
         return ['headers' => [], 'rows' => [], 'error' => t('import.file_empty')];
     }
 
-    $headers = str_getcsv(array_shift($lines));
-    $headers = array_map(static fn ($h) => trim((string) $h), $headers);
-
-    if (count($lines) > 2000) {
-        return ['headers' => $headers, 'rows' => [], 'error' => t('import.file_too_many_rows')];
-    }
-
     $rows = [];
-    foreach ($lines as $line) {
-        $cols = str_getcsv($line);
+    $rowCount = 0;
+    $tooMany = false;
+    while (($cols = fgetcsv($handle, 0, $delimiter)) !== false) {
+        if ($isBlankRow($cols)) {
+            continue;
+        }
+        if (++$rowCount > 2000) {
+            $tooMany = true;
+            break;
+        }
         $row = [];
         foreach ($headers as $i => $h) {
             $row[$h] = isset($cols[$i]) ? trim((string) $cols[$i]) : '';
         }
         $rows[] = $row;
+    }
+    fclose($handle);
+
+    if ($tooMany) {
+        return ['headers' => $headers, 'rows' => [], 'error' => t('import.file_too_many_rows')];
     }
 
     return ['headers' => $headers, 'rows' => $rows, 'error' => null];
