@@ -36,6 +36,7 @@ Read more in [docs/ABOUT.md](docs/ABOUT.md) — what it's for, who it's for, and
 - Bootstrap 5 RTL + locally-hosted Vazirmatn font — no external CDN calls, works offline once installed
 - **Pagination** on every list page (Emails, Services, Accounts, Phone Numbers), with a 10 / 25 / 50 / 100 / 250 / all records-per-page selector; filters and sort order are preserved across pages
 - **Full Persian/English UI** — a language switcher covering the entire application (every module's Add/Edit/View pages, the CSV import wizard, dashboard, search, Needs Attention, settings), backed by simple PHP translation files (`lang/fa.php`, `lang/en.php`). Only the one-time `install.php` setup page stays Persian-only (see [Roadmap](#roadmap))
+- **Service Defaults** — an optional per-service template (identity type, security/recovery statuses, subscription type/status/billing/currency) that pre-fills the Account creation forms; inherited values are always shown to the user and only saved once they submit the form themselves
 
 ## Tech stack
 

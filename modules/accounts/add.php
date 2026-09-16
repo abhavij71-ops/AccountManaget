@@ -253,7 +253,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="card-header bg-white fw-bold"><?= e(t('common.basic_info')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('accounts.field_identity_type_required')) ?></label>
+                <label class="form-label"><?= e(t('accounts.field_identity_type_required')) ?> <span id="inherited_identity_type" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="identity_type" id="identity_type" class="form-select" required>
                     <option value="email" <?= $form['identity_type'] === 'email' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_email')) ?></option>
                     <option value="phone" <?= $form['identity_type'] === 'phone' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_phone')) ?></option>
@@ -361,15 +361,15 @@ require __DIR__ . '/../../includes/header.php';
         <div class="card-header bg-white fw-bold"><?= e(t('accounts.section_security')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('field.twofa')) ?></label>
+                <label class="form-label"><?= e(t('field.twofa')) ?> <span id="inherited_twofa_status" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="twofa_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['twofa_status']) ?></select>
             </div>
             <div class="col-md-8">
-                <label class="form-label"><?= e(t('field.twofa_method')) ?></label>
+                <label class="form-label"><?= e(t('field.twofa_method')) ?> <span id="inherited_twofa_method" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <input type="text" name="twofa_method" class="form-control" value="<?= e($form['twofa_method']) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('field.passkey')) ?></label>
+                <label class="form-label"><?= e(t('field.passkey')) ?> <span id="inherited_passkey_status" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="passkey_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['passkey_status']) ?></select>
             </div>
             <div class="col-md-4">
@@ -377,7 +377,7 @@ require __DIR__ . '/../../includes/header.php';
                 <select name="security_key_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['security_key_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('field.security_questions')) ?></label>
+                <label class="form-label"><?= e(t('field.security_questions')) ?> <span id="inherited_security_questions_status" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="security_questions_status" class="form-select"><?= optionsHtml(SECURITY_STATES, $form['security_questions_status']) ?></select>
             </div>
             <div class="col-md-4">
@@ -402,11 +402,11 @@ require __DIR__ . '/../../includes/header.php';
         <div class="card-header bg-white fw-bold"><?= e(t('section.recovery')) ?></div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('accounts.field_recovery_status')) ?></label>
+                <label class="form-label"><?= e(t('accounts.field_recovery_status')) ?> <span id="inherited_recovery_status" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="recovery_status" class="form-select"><?= optionsHtml(RECOVERY_STATUSES, $form['recovery_status']) ?></select>
             </div>
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('field.recovery_email')) ?></label>
+                <label class="form-label"><?= e(t('field.recovery_email')) ?> <span id="inherited_recovery_email_id" class="text-muted small fw-normal" style="display:none;">(<?= e(t('accounts.marker_same_as_identity')) ?>)</span></label>
                 <select name="recovery_email_id" class="form-select">
                     <option value=""><?= e(t('common.none_selected')) ?></option>
                     <?php foreach ($emails as $em): ?>
@@ -415,7 +415,7 @@ require __DIR__ . '/../../includes/header.php';
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('emails.recovery_phone_label')) ?></label>
+                <label class="form-label"><?= e(t('emails.recovery_phone_label')) ?> <span id="inherited_recovery_phone_id" class="text-muted small fw-normal" style="display:none;">(<?= e(t('accounts.marker_same_as_identity')) ?>)</span></label>
                 <select name="recovery_phone_id" class="form-select">
                     <option value=""><?= e(t('common.none_selected')) ?></option>
                     <?php foreach ($phones as $ph): ?>
@@ -454,7 +454,7 @@ require __DIR__ . '/../../includes/header.php';
         <div class="card-header bg-white fw-bold">Subscription</div>
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('emails.field_type_required')) ?></label>
+                <label class="form-label"><?= e(t('emails.field_type_required')) ?> <span id="inherited_sub_type" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="sub_type" id="sub_type" class="form-select"><?= optionsHtml(SUBSCRIPTION_TYPES, $form['sub_type']) ?></select>
             </div>
             <div class="col-md-4">
@@ -462,7 +462,7 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="text" name="sub_plan" class="form-control" value="<?= e($form['sub_plan']) ?>" placeholder="<?= e(t('accounts.plan_placeholder')) ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('common.field_status_required')) ?></label>
+                <label class="form-label"><?= e(t('common.field_status_required')) ?> <span id="inherited_sub_status" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="sub_status" class="form-select"><?= optionsHtml(SUBSCRIPTION_STATUSES, $form['sub_status']) ?></select>
             </div>
             <div class="col-md-3">
@@ -470,11 +470,11 @@ require __DIR__ . '/../../includes/header.php';
                 <input type="text" inputmode="decimal" name="sub_price" class="form-control" value="<?= e($form['sub_price']) ?>" placeholder="<?= e(t('accounts.price_placeholder')) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label"><?= e(t('accounts.field_currency')) ?></label>
+                <label class="form-label"><?= e(t('accounts.field_currency')) ?> <span id="inherited_sub_currency" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <input type="text" name="sub_currency" class="form-control" value="<?= e($form['sub_currency']) ?>" maxlength="8" placeholder="<?= e(t('accounts.currency_placeholder')) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label"><?= e(t('accounts.field_billing_cycle_required')) ?></label>
+                <label class="form-label"><?= e(t('accounts.field_billing_cycle_required')) ?> <span id="inherited_sub_billing_cycle" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="sub_billing_cycle" class="form-select"><?= optionsHtml(BILLING_CYCLES, $form['sub_billing_cycle']) ?></select>
             </div>
             <div class="col-md-3">
@@ -668,6 +668,142 @@ require __DIR__ . '/../../includes/header.php';
         saveId: 'new-email-save', cancelId: 'new-email-cancel', errorId: 'new-email-error',
         selectId: 'email_id', url: '../emails/create-inline.php', fieldName: 'email_address', labelKey: 'address',
     });
+})();
+(function () {
+    // Service Defaults: pre-fills form fields from the selected service's template
+    // (CORE RULE — never writes anything, only sets the visible form value the user
+    // still has to submit) plus a separate derivation: when the template's
+    // recovery_follows_identity is on, the Recovery Email/Phone select mirrors
+    // whichever identity field is currently chosen. Both kinds are tracked the same
+    // way: a field we set programmatically shows its "inherited" marker and keeps
+    // following future service/identity changes right up until the user edits that
+    // field themselves — real user input is a trusted event (e.isTrusted), our own
+    // dispatched change events are not, so the two are easy to tell apart.
+    var serviceSelect = document.getElementById('service_id');
+    var identitySelect = document.getElementById('identity_type');
+    var emailSelect = document.getElementById('email_id');
+    var phoneSelect = document.querySelector('select[name="identity_phone_id"]');
+    if (!serviceSelect) {
+        return;
+    }
+
+    var templateFields = {
+        identity_type: 'default_identity_type',
+        twofa_status: 'default_twofa_status',
+        twofa_method: 'default_twofa_method',
+        passkey_status: 'default_passkey_status',
+        security_questions_status: 'default_security_questions_status',
+        recovery_status: 'default_recovery_status',
+        sub_type: 'default_subscription_type',
+        sub_status: 'default_subscription_status',
+        sub_billing_cycle: 'default_billing_cycle',
+        sub_currency: 'default_currency',
+    };
+    var derivedFields = ['recovery_email_id', 'recovery_phone_id'];
+    var allFields = Object.keys(templateFields).concat(derivedFields);
+
+    var touched = {};
+    var pristine = {};
+    var recoveryFollowsIdentity = false;
+
+    allFields.forEach(function (name) {
+        var el = document.querySelector('[name="' + name + '"]');
+        if (!el) {
+            return;
+        }
+        pristine[name] = el.value;
+        el.addEventListener('input', onUserEdit);
+        el.addEventListener('change', onUserEdit);
+        function onUserEdit(e) {
+            if (e.isTrusted === false) {
+                return;
+            }
+            touched[name] = true;
+            var marker = document.getElementById('inherited_' + name);
+            if (marker) {
+                marker.style.display = 'none';
+            }
+        }
+    });
+
+    function applyValue(name, value) {
+        if (touched[name] || value === null || value === undefined || value === '') {
+            return;
+        }
+        var el = document.querySelector('[name="' + name + '"]');
+        if (!el) {
+            return;
+        }
+        el.value = String(value);
+        var marker = document.getElementById('inherited_' + name);
+        if (marker) {
+            marker.style.display = '';
+        }
+        el.dispatchEvent(new Event('change'));
+    }
+
+    function resetInherited() {
+        allFields.forEach(function (name) {
+            if (touched[name]) {
+                return;
+            }
+            var el = document.querySelector('[name="' + name + '"]');
+            if (!el) {
+                return;
+            }
+            el.value = pristine[name];
+            var marker = document.getElementById('inherited_' + name);
+            if (marker) {
+                marker.style.display = 'none';
+            }
+            el.dispatchEvent(new Event('change'));
+        });
+    }
+
+    function deriveRecovery() {
+        var type = identitySelect ? identitySelect.value : '';
+        if (!recoveryFollowsIdentity) {
+            return;
+        }
+        if (type === 'email' && emailSelect && emailSelect.value) {
+            applyValue('recovery_email_id', emailSelect.value);
+        } else if (type === 'phone' && phoneSelect && phoneSelect.value) {
+            applyValue('recovery_phone_id', phoneSelect.value);
+        }
+    }
+
+    serviceSelect.addEventListener('change', function () {
+        resetInherited();
+        recoveryFollowsIdentity = false;
+        var id = serviceSelect.value;
+        if (!id) {
+            return;
+        }
+        fetch('../services/get-defaults.php?service_id=' + encodeURIComponent(id), { credentials: 'same-origin' })
+            .then(function (res) { return res.json(); })
+            .then(function (result) {
+                var d = result && result.defaults;
+                if (!d) {
+                    return;
+                }
+                Object.keys(templateFields).forEach(function (formField) {
+                    applyValue(formField, d[templateFields[formField]]);
+                });
+                recoveryFollowsIdentity = !!d.recovery_follows_identity;
+                deriveRecovery();
+            })
+            .catch(function () { /* best-effort pre-fill — leave the form exactly as it was on failure */ });
+    });
+
+    if (identitySelect) {
+        identitySelect.addEventListener('change', deriveRecovery);
+    }
+    if (emailSelect) {
+        emailSelect.addEventListener('change', deriveRecovery);
+    }
+    if (phoneSelect) {
+        phoneSelect.addEventListener('change', deriveRecovery);
+    }
 })();
 </script>
 <?php require __DIR__ . '/../../includes/footer.php'; ?>

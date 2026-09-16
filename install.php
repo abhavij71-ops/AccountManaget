@@ -103,6 +103,24 @@ function installSchemaStatements(): array
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_services_name_unique ON services(service_name COLLATE NOCASE)',
         'CREATE INDEX IF NOT EXISTS idx_services_category ON services(category)',
 
+        'CREATE TABLE IF NOT EXISTS service_defaults (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            service_id INTEGER NOT NULL UNIQUE REFERENCES services(id) ON DELETE CASCADE,
+            default_identity_type TEXT CHECK (default_identity_type IS NULL OR default_identity_type IN (\'email\',\'phone\',\'username\',\'other\')),
+            default_twofa_status TEXT CHECK (default_twofa_status IS NULL OR default_twofa_status IN (\'Enabled\',\'Disabled\',\'Unknown\',\'Not Set\',\'Not Applicable\')),
+            default_twofa_method TEXT,
+            default_passkey_status TEXT CHECK (default_passkey_status IS NULL OR default_passkey_status IN (\'Enabled\',\'Disabled\',\'Unknown\',\'Not Set\',\'Not Applicable\')),
+            default_security_questions_status TEXT CHECK (default_security_questions_status IS NULL OR default_security_questions_status IN (\'Enabled\',\'Disabled\',\'Unknown\',\'Not Set\',\'Not Applicable\')),
+            default_recovery_status TEXT CHECK (default_recovery_status IS NULL OR default_recovery_status IN (\'Verified\',\'Not Verified\',\'Unknown\',\'Not Set\',\'Not Applicable\')),
+            recovery_follows_identity INTEGER NOT NULL DEFAULT 0,
+            default_subscription_type TEXT CHECK (default_subscription_type IS NULL OR default_subscription_type IN (\'Free\',\'Paid\',\'Trial\',\'Promotional\',\'Lifetime\',\'Enterprise\',\'Unknown\',\'Not Applicable\')),
+            default_subscription_status TEXT CHECK (default_subscription_status IS NULL OR default_subscription_status IN (\'Active\',\'Cancelled\',\'Expired\',\'Paused\',\'Unknown\',\'Not Applicable\')),
+            default_billing_cycle TEXT CHECK (default_billing_cycle IS NULL OR default_billing_cycle IN (\'Monthly\',\'Yearly\',\'Weekly\',\'Quarterly\',\'One-Time\',\'Custom\',\'Unknown\',\'Not Applicable\')),
+            default_currency TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
+        )',
+
         'CREATE TABLE IF NOT EXISTS accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE RESTRICT,
@@ -267,7 +285,7 @@ function installSchemaStatements(): array
 function installTriggerStatements(): array
 {
     $tablesWithUpdatedAt = [
-        'users', 'emails', 'email_security', 'services', 'accounts',
+        'users', 'emails', 'email_security', 'services', 'service_defaults', 'accounts',
         'account_security', 'account_recovery', 'phones', 'phone_security', 'subscriptions',
         'payments', 'custom_fields',
     ];

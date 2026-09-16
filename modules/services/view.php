@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/security-score.php';
+require_once __DIR__ . '/_lib.php';
 
 requireLogin();
 
@@ -19,6 +20,8 @@ if (!$service) {
     header('Location: index.php');
     exit;
 }
+
+$defaults = fetchServiceDefaults($pdo, $id) ?? [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -183,6 +186,46 @@ require __DIR__ . '/../../includes/header.php';
                 <span class="badge badge-not-applicable"><?= e(t('enum.Not Applicable')) ?>: <?= (int) $twofaBreakdown['Not Applicable'] ?></span>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="card am-card mb-3">
+    <div class="card-header bg-white fw-bold"><?= e(t('services.view_defaults_title')) ?></div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-5"><?= e(t('services.field_default_identity_type')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_identity_type']) ? e(t('accounts.identity_type_' . $defaults['default_identity_type'])) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_twofa_status')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_twofa_status']) ? renderBadge($defaults['default_twofa_status'], SECURITY_STATES) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_twofa_method')) ?></dt>
+            <dd class="col-7"><?= dashOrValue($defaults['default_twofa_method'] ?? null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_passkey_status')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_passkey_status']) ? renderBadge($defaults['default_passkey_status'], SECURITY_STATES) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_security_questions_status')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_security_questions_status']) ? renderBadge($defaults['default_security_questions_status'], SECURITY_STATES) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_recovery_status')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_recovery_status']) ? renderBadge($defaults['default_recovery_status'], RECOVERY_STATUSES) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_recovery_follows_identity')) ?></dt>
+            <dd class="col-7"><?= yesNoBadge((bool) ($defaults['recovery_follows_identity'] ?? 0)) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_subscription_type')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_subscription_type']) ? renderBadge($defaults['default_subscription_type'], SUBSCRIPTION_TYPES) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_subscription_status')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_subscription_status']) ? renderBadge($defaults['default_subscription_status'], SUBSCRIPTION_STATUSES) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_billing_cycle')) ?></dt>
+            <dd class="col-7"><?= isset($defaults['default_billing_cycle']) ? renderBadge($defaults['default_billing_cycle'], BILLING_CYCLES) : dashOrValue(null) ?></dd>
+
+            <dt class="col-5"><?= e(t('services.field_default_currency')) ?></dt>
+            <dd class="col-7"><?= dashOrValue($defaults['default_currency'] ?? null) ?></dd>
+        </dl>
     </div>
 </div>
 

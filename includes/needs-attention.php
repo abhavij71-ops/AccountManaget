@@ -62,6 +62,17 @@ function evaluateAccountIssues(array $account, ?array $security, ?array $recover
         $issues[] = ['level' => 'Warning', 'message' => t('na.account_recovery_unverified')];
     }
 
+    // Recovery pointing at the same record as the identity anchor is a single point of
+    // failure dressed up as a complete profile — flagged separately from the checks
+    // above regardless of recovery status, since "Verified" doesn't make this any safer.
+    $sameEmail = !empty($account['email_id']) && !empty($recovery['recovery_email_id'])
+        && (int) $account['email_id'] === (int) $recovery['recovery_email_id'];
+    $samePhone = !empty($account['identity_phone_id']) && !empty($recovery['recovery_phone_id'])
+        && (int) $account['identity_phone_id'] === (int) $recovery['recovery_phone_id'];
+    if ($sameEmail || $samePhone) {
+        $issues[] = ['level' => 'Warning', 'message' => t('na.recovery_same_as_identity')];
+    }
+
     if (empty($account['last_verified'])) {
         $issues[] = ['level' => 'Warning', 'message' => t('na.account_never_verified')];
     } else {

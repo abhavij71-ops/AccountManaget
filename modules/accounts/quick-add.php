@@ -131,7 +131,7 @@ require __DIR__ . '/../../includes/header.php';
     <div class="card am-card mb-3">
         <div class="card-body row g-3">
             <div class="col-md-4">
-                <label class="form-label"><?= e(t('accounts.field_identity_type_required')) ?></label>
+                <label class="form-label"><?= e(t('accounts.field_identity_type_required')) ?> <span id="inherited_identity_type" class="text-muted small fw-normal" style="display:none;">(<?= e(t('services.marker_from_template')) ?>)</span></label>
                 <select name="identity_type" id="identity_type" class="form-select" required>
                     <option value="email" <?= $form['identity_type'] === 'email' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_email')) ?></option>
                     <option value="phone" <?= $form['identity_type'] === 'phone' ? 'selected' : '' ?>><?= e(t('accounts.identity_type_phone')) ?></option>
@@ -315,6 +315,64 @@ require __DIR__ . '/../../includes/header.php';
         btnId: 'new-email-btn', panelId: 'new-email-panel', inputId: 'new-email-address',
         saveId: 'new-email-save', cancelId: 'new-email-cancel', errorId: 'new-email-error',
         selectId: 'email_id', url: '../emails/create-inline.php', fieldName: 'email_address', labelKey: 'address',
+    });
+})();
+(function () {
+    // Service Defaults: this form only has an Identity type field in common with the
+    // template (no security/recovery/subscription section here — see add.php's full
+    // form for those), so this is the one-field version of the same pre-fill-only
+    // mechanism. CORE RULE — never writes anything, only sets the visible value the
+    // user still has to submit; the marker disappears the moment the user edits it.
+    var serviceSelect = document.getElementById('service_id');
+    var identitySelect = document.getElementById('identity_type');
+    if (!serviceSelect || !identitySelect) {
+        return;
+    }
+
+    var touched = false;
+    var pristine = identitySelect.value;
+
+    identitySelect.addEventListener('input', onUserEdit);
+    identitySelect.addEventListener('change', onUserEdit);
+    function onUserEdit(e) {
+        if (e.isTrusted === false) {
+            return;
+        }
+        touched = true;
+        var marker = document.getElementById('inherited_identity_type');
+        if (marker) {
+            marker.style.display = 'none';
+        }
+    }
+
+    serviceSelect.addEventListener('change', function () {
+        if (!touched) {
+            identitySelect.value = pristine;
+            var marker = document.getElementById('inherited_identity_type');
+            if (marker) {
+                marker.style.display = 'none';
+            }
+            identitySelect.dispatchEvent(new Event('change'));
+        }
+        var id = serviceSelect.value;
+        if (!id) {
+            return;
+        }
+        fetch('../services/get-defaults.php?service_id=' + encodeURIComponent(id), { credentials: 'same-origin' })
+            .then(function (res) { return res.json(); })
+            .then(function (result) {
+                var d = result && result.defaults;
+                if (!d || touched || !d.default_identity_type) {
+                    return;
+                }
+                identitySelect.value = d.default_identity_type;
+                var marker = document.getElementById('inherited_identity_type');
+                if (marker) {
+                    marker.style.display = '';
+                }
+                identitySelect.dispatchEvent(new Event('change'));
+            })
+            .catch(function () { /* best-effort pre-fill — leave the form exactly as it was on failure */ });
     });
 })();
 </script>
