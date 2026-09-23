@@ -97,33 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $platform->prepare('UPDATE memberships SET role = ? WHERE id = ?')->execute([$newRole, $membershipId]);
             flashSet('success', t('members.role_change_success'));
         }
-    } elseif ($action === 'remove_member') {
-        $membershipId = (int) ($_POST['membership_id'] ?? 0);
-
-        $stmt = $platform->prepare('SELECT * FROM memberships WHERE id = ? AND workspace_id = ? LIMIT 1');
-        $stmt->execute([$membershipId, $workspaceId]);
-        $membership = $stmt->fetch();
-
-        if (!$membership) {
-            flashSet('danger', t('members.invite_role_invalid'));
-        } elseif ((int) $membership['user_id'] === $actorUserId) {
-            flashSet('danger', t('members.cannot_remove_self'));
-        } elseif ($membership['role'] === 'owner' && $actorRole !== 'owner') {
-            flashSet('danger', t('members.invite_role_invalid'));
-        } else {
-            $isLastOwner = false;
-            if ($membership['role'] === 'owner') {
-                $ownerCountStmt = $platform->prepare("SELECT COUNT(*) FROM memberships WHERE workspace_id = ? AND role = 'owner'");
-                $ownerCountStmt->execute([$workspaceId]);
-                $isLastOwner = ((int) $ownerCountStmt->fetchColumn()) <= 1;
-            }
-            if ($isLastOwner) {
-                flashSet('danger', t('members.last_owner_error'));
-            } else {
-                $platform->prepare('DELETE FROM memberships WHERE id = ?')->execute([$membershipId]);
-                flashSet('success', t('members.remove_success'));
-            }
-        }
     } elseif ($action === 'revoke_invite') {
         $invitationId = (int) ($_POST['invitation_id'] ?? 0);
         $platform->prepare('DELETE FROM invitations WHERE id = ? AND workspace_id = ? AND accepted_at IS NULL')
@@ -206,12 +179,7 @@ require __DIR__ . '/includes/header.php';
                     </td>
                     <td class="text-end">
                         <?php if ($canManage): ?>
-                            <form method="post" class="d-inline" data-confirm="<?= e(t('members.remove_confirm', ['email' => $m['email']])) ?>">
-                                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-                                <input type="hidden" name="action" value="remove_member">
-                                <input type="hidden" name="membership_id" value="<?= (int) $m['membership_id'] ?>">
-                                <button type="submit" class="btn btn-sm btn-outline-danger"><?= e(t('members.remove_button')) ?></button>
-                            </form>
+                            <a href="remove-member.php?membership_id=<?= (int) $m['membership_id'] ?>" class="btn btn-sm btn-outline-danger"><?= e(t('members.remove_button')) ?></a>
                         <?php endif; ?>
                     </td>
                 </tr>
