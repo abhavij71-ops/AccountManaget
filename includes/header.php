@@ -72,7 +72,7 @@ $bs = currentTextDirection() === 'rtl' ? 'bootstrap.rtl.min.css' : 'bootstrap.mi
                     <?php endforeach; ?>
                 </div>
                 <?php if ($user): ?>
-                    <span class="text-muted"><?= e($user['full_name'] ?: $user['username']) ?></span>
+                    <span class="text-muted"><?= e($user['full_name'] ?: $user['email']) ?></span>
                     <a href="<?= e(appUrl('logout.php')) ?>" class="btn btn-sm btn-outline-danger"><?= e(t('nav.logout')) ?></a>
                 <?php endif; ?>
             </div>

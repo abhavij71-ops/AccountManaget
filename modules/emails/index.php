@@ -55,6 +55,7 @@ $stmt->execute($params);
 $emails = $stmt->fetchAll();
 
 $totalCount = (int) $pdo->query('SELECT COUNT(*) FROM emails WHERE ' . visibilityScope('emails'))->fetchColumn();
+$hiddenPrivateCount = hiddenPrivateRecordsCount('emails');
 
 $csrf = csrfToken();
 $queryString = $_SERVER['QUERY_STRING'] ?? '';
@@ -67,6 +68,10 @@ require __DIR__ . '/../../includes/header.php';
     <h1 class="h4 mb-0"><?= e(t('emails.title')) ?></h1>
     <a href="add.php" class="btn btn-primary btn-sm"><?= e(t('emails.add')) ?></a>
 </div>
+
+<?php if ($hiddenPrivateCount > 0): ?>
+    <p class="text-muted small mb-3"><?= e(t('common.hidden_private_records_notice', ['count' => $hiddenPrivateCount])) ?></p>
+<?php endif; ?>
 
 <form method="get" class="row g-2 mb-3">
     <div class="col-md-5">

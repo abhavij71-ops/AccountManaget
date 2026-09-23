@@ -19,19 +19,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = (string) ($_POST['password'] ?? '');
     $token = (string) ($_POST['csrf_token'] ?? '');
     $redirect = (string) ($_POST['redirect'] ?? '');
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 
     if (!verifyCsrfToken($token)) {
         $error = t('msg.invalid_request');
     } elseif ($email === '' || $password === '') {
         $error = t('login.enter_credentials');
+    } elseif (isLoginLocked($ip, $email)) {
+        // Deliberately generic: never reveals whether it's this IP or this
+        // username that's over the attempt limit.
+        $error = tOr('login.locked_out', 'Too many failed attempts. Please try again in a few minutes.');
     } else {
-        $stmt = platformDb()->prepare('SELECT id, email, password_hash, is_active FROM accounts_users WHERE email = ? LIMIT 1');
+        $stmt = platformDb()->prepare('SELECT id, email, password_hash, is_active, totp_enabled_at FROM accounts_users WHERE email = ? LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
+            recordLoginAttempt($ip, $email, false);
             $error = t('login.invalid_credentials');
         } elseif ((int) $user['is_active'] !== 1) {
+            recordLoginAttempt($ip, $email, false);
             $error = t('login.account_disabled');
         } else {
             $membershipStmt = platformDb()->prepare(
@@ -48,8 +55,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Reuses "account disabled" rather than a distinct "no workspace
                 // access" string — from the user's side, an account with
                 // nothing to open behaves the same as one that isn't usable.
+                recordLoginAttempt($ip, $email, false);
                 $error = t('login.account_disabled');
             } else {
+                // The password factor succeeded — recorded as such regardless
+                // of what happens next; a wrong TOTP/recovery code afterwards
+                // is tracked separately by verify-totp.php, against the same
+                // login_attempts table.
+                recordLoginAttempt($ip, $email, true);
+
+                if (!empty($user['totp_enabled_at'])) {
+                    session_regenerate_id(true);
+                    $_SESSION['totp_pending_user_id'] = (int) $user['id'];
+                    $_SESSION['totp_pending_email'] = $email;
+                    $_SESSION['totp_pending_workspaces'] = $workspaces;
+                    $_SESSION['totp_pending_redirect'] = $redirect;
+                    header('Location: ' . appUrl('verify-totp.php'));
+                    exit;
+                }
+
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
 
