@@ -2,6 +2,15 @@
 
 This project was built in sequential phases, each adding a coherent slice of functionality. Dates are omitted since this reflects build order, not a dated release history. Starting with v1.1.0, changes are tracked under semantic version numbers (`APP_VERSION` in `config.php`, shown in the sidebar and in Settings → درباره سیستم).
 
+## v1.12.0
+
+- **Add:** "Apply defaults to existing accounts" — retroactively backfills a Service's default template (v1.11.0) onto accounts that already existed when the template was set, or that were created before the template changed.
+  - New `modules/services/apply-defaults.php`: a preview-then-confirm flow. `planServiceDefaultsApply()` (new, same file) computes — without writing anything — exactly which of a service's non-archived accounts would change and which fields, and the same function is re-run fresh on POST rather than trusting what the preview page submitted, so the applied result can never drift from current data.
+  - **Same fill-only rule as account creation:** a field is only touched when its current value is `NULL`, `'Not Set'`, or `'Unknown'` — `'Not Applicable'` and every other real value is a confirmed state and is left untouched. `default_identity_type` is deliberately excluded: an existing account's `identity_type` is never one of those three fillable states, so this action has nothing legitimate to do there.
+  - The `recovery_follows_identity` derivation from v1.11.0 applies here too: an eligible account's Recovery Email/Phone is backfilled from whichever identity it's actually anchored to — never both.
+  - New `serviceHasDefaultsTemplate()` (`modules/services/_lib.php`) gates the new "Apply defaults to existing accounts" button on the Service profile (`view.php`) — hidden entirely when the template has no usable values, since there'd be nothing to apply.
+  - Every account changed by this action gets a `history` entry ("Service Defaults Applied") naming exactly which fields were filled, so this bulk action leaves the same audit trail a manual edit would.
+
 ## v1.11.0
 
 - **Add:** Service Defaults — a per-service template that pre-fills the Account creation forms, so re-entering the same ~30 fields for every account of the same service is no longer necessary.

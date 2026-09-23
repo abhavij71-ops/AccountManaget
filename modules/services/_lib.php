@@ -9,6 +9,24 @@ function fetchServiceDefaults(PDO $pdo, int $serviceId): ?array
     return $row ?: null;
 }
 
+/**
+ * True when the service has at least one usable template value configured —
+ * used to decide whether "Apply defaults to existing accounts" has anything
+ * to offer at all, since an empty template has nothing to apply.
+ */
+function serviceHasDefaultsTemplate(array $defaults): bool
+{
+    if (!empty($defaults['recovery_follows_identity'])) {
+        return true;
+    }
+    foreach ($defaults as $key => $value) {
+        if (str_starts_with($key, 'default_') && $value !== null && $value !== '') {
+            return true;
+        }
+    }
+    return false;
+}
+
 function upsertServiceDefaults(PDO $pdo, int $serviceId, array $data): void
 {
     $exists = $pdo->prepare('SELECT id FROM service_defaults WHERE service_id = ? LIMIT 1');
