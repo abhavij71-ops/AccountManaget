@@ -11,10 +11,8 @@ $pdo = db();
 $id = (int) ($_GET['id'] ?? 0);
 $account = $id ? fetchAccountById($pdo, $id) : null;
 
-if (!$account) {
-    flashSet('danger', t('accounts.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$account || !canSeeRecord($account['visibility'] ?? null, isset($account['owner_user_id']) ? (int) $account['owner_user_id'] : null)) {
+    notFoundResponse(t('accounts.not_found'));
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

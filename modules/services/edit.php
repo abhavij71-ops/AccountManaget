@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
 
-requireLogin();
+requireRole('owner', 'admin', 'member');
 
 $pdo = db();
 $id = (int) ($_GET['id'] ?? 0);
@@ -14,17 +14,19 @@ $stmt = $pdo->prepare('SELECT * FROM services WHERE id = ? LIMIT 1');
 $stmt->execute([$id]);
 $service = $stmt->fetch();
 
-if (!$service) {
-    flashSet('danger', t('services.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$service || !canSeeRecord($service['visibility'] ?? null, isset($service['owner_user_id']) ? (int) $service['owner_user_id'] : null)) {
+    notFoundResponse(t('services.not_found'));
 }
+
+$ownerUserId = isset($service['owner_user_id']) && $service['owner_user_id'] !== null ? (int) $service['owner_user_id'] : null;
+$canManageVisibility = canManageRecordVisibility($ownerUserId);
 
 $defaults = fetchServiceDefaults($pdo, $id);
 
 $errors = [];
 $form = [
     'service_name' => $service['service_name'],
+    'visibility' => $service['visibility'] ?? 'workspace',
     'website' => (string) ($service['website'] ?? ''),
     'login_url' => (string) ($service['login_url'] ?? ''),
     'category' => $service['category'],
@@ -52,12 +54,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
-        if ($key === 'recovery_follows_identity') {
+        if ($key === 'recovery_follows_identity' || $key === 'visibility') {
             continue;
         }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
     $form['recovery_follows_identity'] = isset($_POST['recovery_follows_identity']) ? '1' : '';
+    // Only honored when the viewer is actually allowed to manage it — a
+    // tampered POST from anyone else leaves the stored value untouched.
+    if ($canManageVisibility) {
+        $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+        $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : $form['visibility'];
+    }
 
     if ($form['service_name'] === '') {
         $errors[] = t('services.name_required');
@@ -97,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($form['status'] !== $service['status']) {
                 log_history($pdo, 'service', $id, 'Status Changed', 'status', $service['status'], $form['status']);
             }
-            $baseDiffFields = ['service_name', 'website', 'login_url', 'category', 'purpose', 'notes'];
+            $baseDiffFields = ['service_name', 'website', 'login_url', 'category', 'purpose', 'notes', 'visibility'];
             foreach ($baseDiffFields as $f) {
                 $old = (string) ($service[$f] ?? '');
                 if ($old !== $form[$f]) {
@@ -107,7 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $stmt = $pdo->prepare('UPDATE services SET
                 service_name = :service_name, website = :website, login_url = :login_url,
-                category = :category, status = :status, purpose = :purpose, notes = :notes
+                category = :category, status = :status, purpose = :purpose, notes = :notes,
+                visibility = :visibility
                 WHERE id = :id');
             $stmt->execute([
                 'service_name' => $form['service_name'],
@@ -117,6 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $form['status'],
                 'purpose' => $form['purpose'] !== '' ? $form['purpose'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'id' => $id,
             ]);
 
@@ -199,6 +209,16 @@ require __DIR__ . '/../../includes/header.php';
                 <label class="form-label"><?= e(t('services.field_purpose')) ?></label>
                 <input type="text" name="purpose" class="form-control" value="<?= e($form['purpose']) ?>">
             </div>
+            <?php if ($canManageVisibility): ?>
+                <div class="col-md-4">
+                    <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                    <select name="visibility" class="form-select">
+                        <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                        <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                    </select>
+                    <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
+                </div>
+            <?php endif; ?>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>

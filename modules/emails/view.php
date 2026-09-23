@@ -11,10 +11,8 @@ $pdo = db();
 $id = (int) ($_GET['id'] ?? 0);
 $email = $id ? fetchEmailById($pdo, $id) : null;
 
-if (!$email) {
-    flashSet('danger', t('emails.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$email || !canSeeRecord($email['visibility'] ?? null, isset($email['owner_user_id']) ? (int) $email['owner_user_id'] : null)) {
+    notFoundResponse(t('emails.not_found'));
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

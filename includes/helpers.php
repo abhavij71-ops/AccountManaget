@@ -317,6 +317,109 @@ function log_history(
     $stmt->execute([$entityType, $entityId, $action, $fieldName, $oldValue, $newValue, currentUserId()]);
 }
 
+const VISIBILITY_SCOPED_TABLES = ['emails', 'services', 'accounts', 'phones'];
+
+/**
+ * SQL condition fragment (no placeholders — $table is checked against a
+ * fixed whitelist and the only other value embedded is the current session's
+ * own int user id, so this is safe to concatenate directly into a query)
+ * restricting rows to what the current user's role in the active workspace
+ * is allowed to see:
+ *
+ * - owner/admin: everything — no restriction.
+ * - member/viewer, or no recognized role at all (fail closed rather than
+ *   open): workspace-visible records, plus their own private ones.
+ *
+ * $table must be the table name (or the alias it's queried under) exactly as
+ * it appears in the calling query's FROM/JOIN, since it's used to qualify
+ * `visibility`/`owner_user_id` and avoid ambiguity in a joined query.
+ *
+ * Preparation only, per this task: nothing calls this from an actual query
+ * yet — that's separate follow-up work.
+ */
+function visibilityScope(string $table): string
+{
+    if (!in_array($table, VISIBILITY_SCOPED_TABLES, true)) {
+        throw new InvalidArgumentException("visibilityScope(): unrecognized table \"{$table}\"");
+    }
+
+    $role = currentRole();
+    if ($role === 'owner' || $role === 'admin') {
+        return '1=1';
+    }
+
+    $userId = (int) currentUserId();
+    return "({$table}.visibility = 'workspace' OR ({$table}.visibility = 'private' AND {$table}.owner_user_id = {$userId}))";
+}
+
+/**
+ * Ends the request with a real HTTP 404, styled like the rest of the app.
+ * Used for both "record not found" and — per the multi-workspace visibility
+ * model — "record exists but the current user isn't allowed to see it,"
+ * which must render identically to a genuine 404 (not a 403, not the old
+ * redirect-with-flash "not found" pattern) so a record's mere existence
+ * never leaks through a different response shape.
+ */
+function notFoundResponse(string $message): void
+{
+    http_response_code(404);
+    $pageTitle = $message;
+    require __DIR__ . '/header.php';
+    echo '<div class="alert alert-warning">' . e($message) . '</div>';
+    require __DIR__ . '/footer.php';
+    exit;
+}
+
+/**
+ * True when the current user may see a record with this stored
+ * visibility/owner — the same access rule as visibilityScope(), but for a
+ * single row already fetched some other way (e.g. a _lib.php helper),
+ * rather than filtered in SQL. View/edit pages combine this with a
+ * not-found check into one notFoundResponse() so "exists but hidden" and
+ * "doesn't exist" are indistinguishable to the caller.
+ */
+function canSeeRecord(?string $visibility, ?int $ownerUserId): bool
+{
+    $role = currentRole();
+    if ($role === 'owner' || $role === 'admin') {
+        return true;
+    }
+    if ($visibility === 'workspace') {
+        return true;
+    }
+    return $ownerUserId !== null && $ownerUserId === currentUserId();
+}
+
+/**
+ * True when the current user may change a record's visibility: the record's
+ * own owner (regardless of workspace role — a member can always manage the
+ * visibility of their own private record), or a workspace owner/admin.
+ * Gates both whether the edit form shows the visibility control and whether
+ * a posted visibility value is honored, so a tampered POST from someone this
+ * returns false for still can't move the field.
+ */
+function canManageRecordVisibility(?int $ownerUserId): bool
+{
+    $role = currentRole();
+    if ($role === 'owner' || $role === 'admin') {
+        return true;
+    }
+    return $ownerUserId !== null && $ownerUserId === currentUserId();
+}
+
+/**
+ * t($key), falling back to $default when the key isn't defined in any
+ * lang/*.php file yet — t() itself returns the raw key unresolved (same
+ * detection enumLabel()/historyActionLabel() above already rely on), so
+ * this is a safe way to reference a not-yet-added key like the visibility
+ * field's labels without ever showing the user a raw "common.xyz" string.
+ */
+function tOr(string $key, string $default): string
+{
+    $value = t($key);
+    return $value !== $key ? $value : $default;
+}
+
 function historyActionLabel(string $action): string
 {
     $key = 'history.' . $action;

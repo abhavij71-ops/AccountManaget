@@ -14,10 +14,8 @@ $stmt = $pdo->prepare('SELECT * FROM phones WHERE id = ? LIMIT 1');
 $stmt->execute([$id]);
 $phone = $stmt->fetch();
 
-if (!$phone) {
-    flashSet('danger', t('phones.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$phone || !canSeeRecord($phone['visibility'] ?? null, isset($phone['owner_user_id']) ? (int) $phone['owner_user_id'] : null)) {
+    notFoundResponse(t('phones.not_found'));
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

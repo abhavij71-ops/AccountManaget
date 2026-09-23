@@ -11,7 +11,7 @@ $pdo = db();
 $q = trim((string) ($_GET['q'] ?? ''));
 $statusFilter = (string) ($_GET['status'] ?? '');
 
-$where = [];
+$where = [visibilityScope('phones')];
 $params = [];
 
 if ($q !== '') {
@@ -48,7 +48,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $phones = $stmt->fetchAll();
 
-$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM phones')->fetchColumn();
+$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM phones WHERE ' . visibilityScope('phones'))->fetchColumn();
 
 $pageTitle = t('phones.title');
 require __DIR__ . '/../../includes/header.php';

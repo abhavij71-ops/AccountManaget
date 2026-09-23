@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 
-requireLogin();
+requireRole('owner', 'admin', 'member');
 
 $pdo = db();
 $id = (int) ($_GET['id'] ?? 0);
@@ -13,11 +13,12 @@ $stmt = $pdo->prepare('SELECT * FROM phones WHERE id = ? LIMIT 1');
 $stmt->execute([$id]);
 $phone = $stmt->fetch();
 
-if (!$phone) {
-    flashSet('danger', t('phones.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$phone || !canSeeRecord($phone['visibility'] ?? null, isset($phone['owner_user_id']) ? (int) $phone['owner_user_id'] : null)) {
+    notFoundResponse(t('phones.not_found'));
 }
+
+$ownerUserId = isset($phone['owner_user_id']) && $phone['owner_user_id'] !== null ? (int) $phone['owner_user_id'] : null;
+$canManageVisibility = canManageRecordVisibility($ownerUserId);
 
 $stmt = $pdo->prepare('SELECT * FROM phone_security WHERE phone_id = ?');
 $stmt->execute([$id]);
@@ -26,6 +27,7 @@ $phoneSecurity = $stmt->fetch() ?: [];
 $errors = [];
 $form = [
     'phone_number' => $phone['phone_number'],
+    'visibility' => $phone['visibility'] ?? 'workspace',
     'country' => (string) ($phone['country'] ?? ''),
     'label' => (string) ($phone['label'] ?? ''),
     'status' => $phone['status'],
@@ -44,12 +46,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
-        if ($key === 'is_primary') {
+        if ($key === 'is_primary' || $key === 'visibility') {
             continue;
         }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
     $form['is_primary'] = isset($_POST['is_primary']) ? '1' : '';
+    // Only honored when the viewer is actually allowed to manage it — a
+    // tampered POST from anyone else leaves the stored value untouched.
+    if ($canManageVisibility) {
+        $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+        $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : $form['visibility'];
+    }
 
     if ($form['phone_number'] === '') {
         $errors[] = t('phones.number_required');
@@ -71,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($form['status'] !== $phone['status']) {
                 log_history($pdo, 'phone', $id, 'Status Changed', 'status', $phone['status'], $form['status']);
             }
-            $baseDiffFields = ['phone_number', 'country', 'label', 'notes'];
+            $baseDiffFields = ['phone_number', 'country', 'label', 'notes', 'visibility'];
             foreach ($baseDiffFields as $f) {
                 $old = (string) ($phone[$f] ?? '');
                 if ($old !== $form[$f]) {
@@ -86,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $stmt = $pdo->prepare('UPDATE phones SET
                 phone_number = :phone_number, country = :country, label = :label,
-                status = :status, is_primary = :is_primary, notes = :notes
+                status = :status, is_primary = :is_primary, notes = :notes, visibility = :visibility
                 WHERE id = :id');
             $stmt->execute([
                 'phone_number' => $form['phone_number'],
@@ -95,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $form['status'],
                 'is_primary' => $form['is_primary'] === '1' ? 1 : 0,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'id' => $id,
             ]);
 
@@ -177,6 +186,16 @@ require __DIR__ . '/../../includes/header.php';
                     <label for="is_primary" class="form-check-label"><?= e(t('phones.field_is_primary')) ?></label>
                 </div>
             </div>
+            <?php if ($canManageVisibility): ?>
+                <div class="col-md-3">
+                    <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                    <select name="visibility" class="form-select">
+                        <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                        <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                    </select>
+                    <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
+                </div>
+            <?php endif; ?>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>

@@ -19,26 +19,29 @@ if ($q !== '') {
     $like = '%' . $q . '%';
 
     $stmt = $pdo->prepare("SELECT id, email_address, display_name, type, status FROM emails
-        WHERE email_address LIKE :q OR display_name LIKE :q OR provider LIKE :q OR purpose LIKE :q OR notes LIKE :q
+        WHERE (email_address LIKE :q OR display_name LIKE :q OR provider LIKE :q OR purpose LIKE :q OR notes LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
-                      WHERE tg.entity_type = 'email' AND tg.entity_id = emails.id AND t.name LIKE :q)
-        ORDER BY email_address LIMIT 30");
+                      WHERE tg.entity_type = 'email' AND tg.entity_id = emails.id AND t.name LIKE :q))
+           AND " . visibilityScope('emails') . '
+        ORDER BY email_address LIMIT 30');
     $stmt->execute(['q' => $like]);
     $emailResults = $stmt->fetchAll();
 
     $stmt = $pdo->prepare("SELECT id, service_name, category, status FROM services
-        WHERE service_name LIKE :q OR category LIKE :q OR website LIKE :q OR purpose LIKE :q OR notes LIKE :q
+        WHERE (service_name LIKE :q OR category LIKE :q OR website LIKE :q OR purpose LIKE :q OR notes LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
-                      WHERE tg.entity_type = 'service' AND tg.entity_id = services.id AND t.name LIKE :q)
-        ORDER BY service_name LIMIT 30");
+                      WHERE tg.entity_type = 'service' AND tg.entity_id = services.id AND t.name LIKE :q))
+           AND " . visibilityScope('services') . '
+        ORDER BY service_name LIMIT 30');
     $stmt->execute(['q' => $like]);
     $serviceResults = $stmt->fetchAll();
 
     $stmt = $pdo->prepare("SELECT id, phone_number, label, status FROM phones
-        WHERE phone_number LIKE :q OR label LIKE :q OR notes LIKE :q
+        WHERE (phone_number LIKE :q OR label LIKE :q OR notes LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
-                      WHERE tg.entity_type = 'phone' AND tg.entity_id = phones.id AND t.name LIKE :q)
-        ORDER BY phone_number LIMIT 30");
+                      WHERE tg.entity_type = 'phone' AND tg.entity_id = phones.id AND t.name LIKE :q))
+           AND " . visibilityScope('phones') . '
+        ORDER BY phone_number LIMIT 30');
     $stmt->execute(['q' => $like]);
     $phoneResults = $stmt->fetchAll();
 
@@ -51,14 +54,15 @@ if ($q !== '') {
         JOIN services s ON s.id = a.service_id
         LEFT JOIN emails e ON e.id = a.email_id
         LEFT JOIN phones p ON p.id = a.identity_phone_id
-        WHERE a.username LIKE :q OR a.display_name LIKE :q OR a.external_account_id LIKE :q OR a.notes LIKE :q
+        WHERE (a.username LIKE :q OR a.display_name LIKE :q OR a.external_account_id LIKE :q OR a.notes LIKE :q
            OR p.phone_number LIKE :q OR a.identity_value LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
                       WHERE tg.entity_type = 'account' AND tg.entity_id = a.id AND t.name LIKE :q)
            OR EXISTS (SELECT 1 FROM custom_fields cf
                       WHERE cf.account_id = a.id AND (cf.field_key LIKE :q OR cf.field_value LIKE :q))
-           OR EXISTS (SELECT 1 FROM payments p2 WHERE p2.account_id = a.id AND p2.payment_reference LIKE :q)
-        ORDER BY a.username LIMIT 30");
+           OR EXISTS (SELECT 1 FROM payments p2 WHERE p2.account_id = a.id AND p2.payment_reference LIKE :q))
+           AND " . visibilityScope('a') . '
+        ORDER BY a.username LIMIT 30');
     $stmt->execute(['q' => $like]);
     $accountResults = $stmt->fetchAll();
 
