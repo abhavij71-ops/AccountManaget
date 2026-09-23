@@ -190,7 +190,12 @@ require __DIR__ . '/../../includes/header.php';
 </div>
 
 <div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold"><?= e(t('services.view_defaults_title')) ?></div>
+    <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><?= e(t('services.view_defaults_title')) ?></span>
+        <?php if (serviceHasDefaultsTemplate($defaults)): ?>
+            <a href="apply-defaults.php?id=<?= (int) $id ?>" class="btn btn-sm btn-outline-primary"><?= e(t('services.apply_defaults_button')) ?></a>
+        <?php endif; ?>
+    </div>
     <div class="card-body">
         <dl class="row mb-0">
             <dt class="col-5"><?= e(t('services.field_default_identity_type')) ?></dt>
