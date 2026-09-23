@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/platform-db.php';
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/totp.php';
 
 function isLoggedIn(): bool
 {
@@ -114,6 +115,64 @@ function requireLogin(): void
         header('Location: ' . appUrl('login.php'));
         exit;
     }
+
+    trackActiveSession();
+}
+
+/**
+ * Lazily creates and keeps alive this browser's row in the central sessions
+ * table — deliberately folded into requireLogin() itself (called by every
+ * protected page already) rather than needing login.php/logout.php to
+ * change too. The plain device token lives only in $_SESSION; the table
+ * stores a SHA-256 hash of it. SHA-256, not password_hash(), is the correct
+ * choice here: the token is a 256-bit random value, not a low-entropy
+ * secret a human chose, so a fast hash is fine and avoids bcrypt overhead
+ * on every single request.
+ *
+ * A row that's disappeared (deleted by "sign out everywhere" from another
+ * device) signs this device out too, the same way requireLogin() already
+ * reacts to a deactivated account.
+ */
+function trackActiveSession(): void
+{
+    $userId = currentUserId();
+    if ($userId === null) {
+        return;
+    }
+
+    $platform = platformDb();
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $userAgent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+
+    if (empty($_SESSION['device_token'])) {
+        $token = bin2hex(random_bytes(32));
+        $_SESSION['device_token'] = $token;
+        $platform->prepare(
+            'INSERT INTO sessions (user_id, token_hash, ip, user_agent) VALUES (?, ?, ?, ?)'
+        )->execute([$userId, hash('sha256', $token), $ip, $userAgent]);
+        return;
+    }
+
+    $tokenHash = hash('sha256', (string) $_SESSION['device_token']);
+    $stmt = $platform->prepare('SELECT id FROM sessions WHERE user_id = ? AND token_hash = ? LIMIT 1');
+    $stmt->execute([$userId, $tokenHash]);
+    $sessionId = $stmt->fetchColumn();
+
+    if ($sessionId === false) {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        session_start();
+        flashSet('danger', tOr('login.session_revoked', 'You were signed out, possibly from another device.'));
+        header('Location: ' . appUrl('login.php'));
+        exit;
+    }
+
+    $platform->prepare("UPDATE sessions SET ip = ?, user_agent = ?, last_seen_at = datetime('now') WHERE id = ?")
+        ->execute([$ip, $userAgent, (int) $sessionId]);
 }
 
 /**
@@ -186,6 +245,57 @@ function csrfToken(): string
 function verifyCsrfToken(?string $token): bool
 {
     return is_string($token) && !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+const LOGIN_LOCKOUT_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_WINDOW_MINUTES = 15;
+const LOGIN_ATTEMPTS_RETENTION_HOURS = 24;
+
+/**
+ * True when either this IP or this login identifier has LOGIN_LOCKOUT_MAX_ATTEMPTS
+ * failed attempts logged within the last LOGIN_LOCKOUT_WINDOW_MINUTES minutes.
+ * A rolling window, not a stored lockout-until timestamp — access is restored
+ * automatically as the qualifying failures age past the window, up to fifteen
+ * minutes after the last of them.
+ *
+ * Deliberately returns one bare bool: which axis (IP vs. username) actually
+ * tripped it is never exposed to the caller, so the login page can never
+ * reveal — even implicitly — which of the two is the one locked out.
+ */
+function isLoginLocked(string $ip, string $username): bool
+{
+    $since = date('Y-m-d H:i:s', strtotime('-' . LOGIN_LOCKOUT_WINDOW_MINUTES . ' minutes'));
+
+    $ipStmt = platformDb()->prepare(
+        'SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND success = 0 AND attempted_at >= ?'
+    );
+    $ipStmt->execute([$ip, $since]);
+    if ((int) $ipStmt->fetchColumn() >= LOGIN_LOCKOUT_MAX_ATTEMPTS) {
+        return true;
+    }
+
+    $usernameStmt = platformDb()->prepare(
+        'SELECT COUNT(*) FROM login_attempts WHERE username = ? COLLATE NOCASE AND success = 0 AND attempted_at >= ?'
+    );
+    $usernameStmt->execute([$username, $since]);
+    return (int) $usernameStmt->fetchColumn() >= LOGIN_LOCKOUT_MAX_ATTEMPTS;
+}
+
+/**
+ * Logs one login attempt and opportunistically purges anything older than
+ * LOGIN_ATTEMPTS_RETENTION_HOURS. This app has no cron runner yet (see
+ * docs/ROADMAP-SAAS.md Phase 15), so the table keeps itself bounded here
+ * instead of depending on a scheduled job that doesn't exist.
+ */
+function recordLoginAttempt(string $ip, string $username, bool $success): void
+{
+    $platform = platformDb();
+
+    $cutoff = date('Y-m-d H:i:s', strtotime('-' . LOGIN_ATTEMPTS_RETENTION_HOURS . ' hours'));
+    $platform->prepare('DELETE FROM login_attempts WHERE attempted_at < ?')->execute([$cutoff]);
+
+    $platform->prepare('INSERT INTO login_attempts (ip, username, success) VALUES (?, ?, ?)')
+        ->execute([$ip, $username, $success ? 1 : 0]);
 }
 
 function e(?string $value): string
