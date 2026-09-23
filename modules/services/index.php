@@ -12,7 +12,7 @@ $q = trim((string) ($_GET['q'] ?? ''));
 $statusFilter = (string) ($_GET['status'] ?? '');
 $categoryFilter = trim((string) ($_GET['category'] ?? ''));
 
-$where = [];
+$where = [visibilityScope('services')];
 $params = [];
 
 if ($q !== '') {
@@ -53,8 +53,8 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $services = $stmt->fetchAll();
 
-$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM services')->fetchColumn();
-$categories = $pdo->query("SELECT DISTINCT category FROM services WHERE category != 'Not Set' ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM services WHERE ' . visibilityScope('services'))->fetchColumn();
+$categories = $pdo->query("SELECT DISTINCT category FROM services WHERE category != 'Not Set' AND " . visibilityScope('services') . ' ORDER BY category')->fetchAll(PDO::FETCH_COLUMN);
 
 $pageTitle = t('services.title');
 require __DIR__ . '/../../includes/header.php';

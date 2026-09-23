@@ -13,7 +13,7 @@ $q = trim((string) ($_GET['q'] ?? ''));
 $statusFilter = (string) ($_GET['status'] ?? '');
 $typeFilter = (string) ($_GET['type'] ?? '');
 
-$where = [];
+$where = [visibilityScope('emails')];
 $params = [];
 
 if ($q !== '') {
@@ -54,7 +54,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $emails = $stmt->fetchAll();
 
-$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM emails')->fetchColumn();
+$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM emails WHERE ' . visibilityScope('emails'))->fetchColumn();
 
 $csrf = csrfToken();
 $queryString = $_SERVER['QUERY_STRING'] ?? '';

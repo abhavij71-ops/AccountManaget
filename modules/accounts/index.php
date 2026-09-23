@@ -30,7 +30,7 @@ if (!array_key_exists($sort, $sortable)) {
 }
 $dir = (strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc') ? 'DESC' : 'ASC';
 
-$where = [];
+$where = [visibilityScope('a')];
 $params = [];
 
 if (!$showArchived) {
@@ -86,8 +86,8 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $accounts = $stmt->fetchAll();
 
-$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM accounts')->fetchColumn();
-$services = $pdo->query('SELECT id, service_name FROM services ORDER BY service_name')->fetchAll();
+$totalCount = (int) $pdo->query('SELECT COUNT(*) FROM accounts WHERE ' . visibilityScope('accounts'))->fetchColumn();
+$services = $pdo->query('SELECT id, service_name FROM services WHERE ' . visibilityScope('services') . ' ORDER BY service_name')->fetchAll();
 
 function accountSortLink(string $col, string $label, string $sort, string $dir): string
 {

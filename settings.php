@@ -6,7 +6,6 @@ require_once __DIR__ . '/includes/helpers.php';
 
 requireLogin();
 
-$pdo = db();
 $user = currentUser();
 $errors = [];
 
@@ -40,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $newPasswordConfirm = (string) ($_POST['new_password_confirm'] ?? '');
 
     if (!$errors) {
-        $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
+        $stmt = platformDb()->prepare('SELECT password_hash FROM accounts_users WHERE id = ?');
         $stmt->execute([currentUserId()]);
         $hash = $stmt->fetchColumn();
 
@@ -55,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
-        $stmt = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        $stmt = platformDb()->prepare('UPDATE accounts_users SET password_hash = ? WHERE id = ?');
         $stmt->execute([$newHash, currentUserId()]);
         session_regenerate_id(true);
         flashSet('success', t('settings.password_changed_success'));
@@ -76,7 +75,7 @@ require __DIR__ . '/includes/header.php';
             <div class="card-header bg-white fw-bold"><?= e(t('settings.account_info_title')) ?></div>
             <div class="card-body">
                 <dl class="row mb-0">
-                    <dt class="col-5"><?= e(t('common.field_username')) ?></dt><dd class="col-7"><?= e($user['username'] ?? '') ?></dd>
+                    <dt class="col-5"><?= e(tOr('settings.field_email', 'Email')) ?></dt><dd class="col-7"><?= e($user['email'] ?? '') ?></dd>
                     <dt class="col-5"><?= e(t('settings.field_full_name')) ?></dt><dd class="col-7"><?= dashOrValue($user['full_name'] ?? null) ?></dd>
                 </dl>
             </div>

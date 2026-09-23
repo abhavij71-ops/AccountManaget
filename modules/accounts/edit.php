@@ -5,17 +5,18 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
 
-requireLogin();
+requireRole('owner', 'admin', 'member');
 
 $pdo = db();
 $id = (int) ($_GET['id'] ?? 0);
 $account = $id ? fetchAccountById($pdo, $id) : null;
 
-if (!$account) {
-    flashSet('danger', t('accounts.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$account || !canSeeRecord($account['visibility'] ?? null, isset($account['owner_user_id']) ? (int) $account['owner_user_id'] : null)) {
+    notFoundResponse(t('accounts.not_found'));
 }
+
+$ownerUserId = isset($account['owner_user_id']) && $account['owner_user_id'] !== null ? (int) $account['owner_user_id'] : null;
+$canManageVisibility = canManageRecordVisibility($ownerUserId);
 
 $security = fetchAccountSecurity($pdo, $id) ?? [];
 $recovery = fetchAccountRecovery($pdo, $id) ?? [];
@@ -25,6 +26,7 @@ $errors = [];
 
 $form = [
     'service_id' => (string) $account['service_id'],
+    'visibility' => $account['visibility'] ?? 'workspace',
     'identity_type' => (string) ($account['identity_type'] ?? 'email'),
     'email_id' => (string) ($account['email_id'] ?? ''),
     'identity_phone_id' => (string) ($account['identity_phone_id'] ?? ''),
@@ -84,12 +86,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
-        if ($key === 'pay_required') {
+        if ($key === 'pay_required' || $key === 'visibility') {
             continue;
         }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
     $form['pay_required'] = isset($_POST['pay_required']) ? '1' : '';
+    // Only honored when the viewer is actually allowed to manage it — a
+    // tampered POST from anyone else leaves the stored value untouched.
+    if ($canManageVisibility) {
+        $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+        $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : $form['visibility'];
+    }
 
     $serviceId = (int) $form['service_id'];
     $emailId = (int) $form['email_id'];
@@ -163,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $baseDiffFields = [
                 'identity_type', 'identity_value', 'username', 'display_name', 'external_account_id', 'account_url', 'login_url',
-                'account_type', 'created_date', 'last_login', 'last_verified', 'notes',
+                'account_type', 'created_date', 'last_login', 'last_verified', 'notes', 'visibility',
             ];
             foreach ($baseDiffFields as $f) {
                 $old = (string) ($account[$f] ?? '');
@@ -196,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 username = :username, display_name = :display_name,
                 external_account_id = :external_account_id, account_url = :account_url, login_url = :login_url,
                 status = :status, account_type = :account_type, created_date = :created_date,
-                last_login = :last_login, last_verified = :last_verified, notes = :notes
+                last_login = :last_login, last_verified = :last_verified, notes = :notes, visibility = :visibility
                 WHERE id = :id');
             $stmt->execute([
                 'service_id' => $serviceId,
@@ -215,6 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'last_login' => $form['last_login'] !== '' ? $form['last_login'] : null,
                 'last_verified' => $form['last_verified'] !== '' ? $form['last_verified'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'id' => $id,
             ]);
 
@@ -377,6 +386,16 @@ require __DIR__ . '/../../includes/header.php';
                 <label class="form-label"><?= e(t('common.field_last_verified')) ?></label>
                 <input type="date" name="last_verified" class="form-control" value="<?= e($form['last_verified']) ?>">
             </div>
+            <?php if ($canManageVisibility): ?>
+                <div class="col-md-3">
+                    <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                    <select name="visibility" class="form-select">
+                        <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                        <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                    </select>
+                    <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
+                </div>
+            <?php endif; ?>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>

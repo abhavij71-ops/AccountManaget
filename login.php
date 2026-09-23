@@ -13,18 +13,20 @@ $error = '';
 $redirect = isset($_GET['redirect']) ? (string) $_GET['redirect'] : '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim((string) ($_POST['username'] ?? ''));
+    // Field is still posted as "username" (see the form below) but now holds
+    // the accounts_users login identifier, which is an email address.
+    $email = trim((string) ($_POST['username'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
     $token = (string) ($_POST['csrf_token'] ?? '');
     $redirect = (string) ($_POST['redirect'] ?? '');
 
     if (!verifyCsrfToken($token)) {
         $error = t('msg.invalid_request');
-    } elseif ($username === '' || $password === '') {
+    } elseif ($email === '' || $password === '') {
         $error = t('login.enter_credentials');
     } else {
-        $stmt = db()->prepare('SELECT id, username, password_hash, is_active FROM users WHERE username = ? LIMIT 1');
-        $stmt->execute([$username]);
+        $stmt = platformDb()->prepare('SELECT id, email, password_hash, is_active FROM accounts_users WHERE email = ? LIMIT 1');
+        $stmt->execute([$email]);
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
@@ -32,14 +34,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ((int) $user['is_active'] !== 1) {
             $error = t('login.account_disabled');
         } else {
-            session_regenerate_id(true);
-            $_SESSION['user_id'] = (int) $user['id'];
+            $membershipStmt = platformDb()->prepare(
+                'SELECT m.workspace_id, m.role, w.name
+                 FROM memberships m
+                 JOIN workspaces w ON w.id = m.workspace_id
+                 WHERE m.user_id = ?
+                 ORDER BY w.name COLLATE NOCASE'
+            );
+            $membershipStmt->execute([$user['id']]);
+            $workspaces = $membershipStmt->fetchAll();
 
-            $upd = db()->prepare('UPDATE users SET last_login_at = datetime(\'now\') WHERE id = ?');
-            $upd->execute([$user['id']]);
+            if (count($workspaces) === 0) {
+                // Reuses "account disabled" rather than a distinct "no workspace
+                // access" string — from the user's side, an account with
+                // nothing to open behaves the same as one that isn't usable.
+                $error = t('login.account_disabled');
+            } else {
+                session_regenerate_id(true);
+                $_SESSION['user_id'] = (int) $user['id'];
 
-            header('Location: ' . appUrl(safeInternalRedirect($redirect)));
-            exit;
+                if (count($workspaces) === 1) {
+                    $_SESSION['workspace_id'] = (int) $workspaces[0]['workspace_id'];
+                    $_SESSION['role'] = $workspaces[0]['role'];
+                    header('Location: ' . appUrl(safeInternalRedirect($redirect)));
+                } else {
+                    $target = 'select-workspace.php' . ($redirect !== '' ? '?redirect=' . urlencode($redirect) : '');
+                    header('Location: ' . appUrl($target));
+                }
+                exit;
+            }
         }
     }
 }

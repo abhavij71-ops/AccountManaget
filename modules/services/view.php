@@ -15,10 +15,8 @@ $stmt = $pdo->prepare('SELECT * FROM services WHERE id = ? LIMIT 1');
 $stmt->execute([$id]);
 $service = $stmt->fetch();
 
-if (!$service) {
-    flashSet('danger', t('services.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$service || !canSeeRecord($service['visibility'] ?? null, isset($service['owner_user_id']) ? (int) $service['owner_user_id'] : null)) {
+    notFoundResponse(t('services.not_found'));
 }
 
 $defaults = fetchServiceDefaults($pdo, $id) ?? [];

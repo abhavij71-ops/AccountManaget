@@ -5,23 +5,25 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
 
-requireLogin();
+requireRole('owner', 'admin', 'member');
 
 $pdo = db();
 $id = (int) ($_GET['id'] ?? 0);
 $email = $id ? fetchEmailById($pdo, $id) : null;
 
-if (!$email) {
-    flashSet('danger', t('emails.not_found'));
-    header('Location: index.php');
-    exit;
+if (!$email || !canSeeRecord($email['visibility'] ?? null, isset($email['owner_user_id']) ? (int) $email['owner_user_id'] : null)) {
+    notFoundResponse(t('emails.not_found'));
 }
+
+$ownerUserId = isset($email['owner_user_id']) && $email['owner_user_id'] !== null ? (int) $email['owner_user_id'] : null;
+$canManageVisibility = canManageRecordVisibility($ownerUserId);
 
 $security = fetchEmailSecurity($pdo, $id) ?? [];
 $errors = [];
 
 $form = [
     'email_address' => $email['email_address'],
+    'visibility' => $email['visibility'] ?? 'workspace',
     'display_name' => (string) ($email['display_name'] ?? ''),
     'provider' => (string) ($email['provider'] ?? ''),
     'type' => $email['type'],
@@ -55,7 +57,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
+        if ($key === 'visibility') {
+            continue;
+        }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
+    }
+    // Only honored when the viewer is actually allowed to manage it — a
+    // tampered POST from anyone else leaves the stored value untouched.
+    if ($canManageVisibility) {
+        $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+        $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : $form['visibility'];
     }
 
     if ($form['email_address'] === '' || !filter_var($form['email_address'], FILTER_VALIDATE_EMAIL)) {
@@ -85,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($oldTwofa !== $form['twofa_status']) {
                 log_history($pdo, 'email', $id, '2FA Changed', 'twofa_status', $oldTwofa, $form['twofa_status']);
             }
-            $baseDiffFields = ['email_address', 'display_name', 'provider', 'type', 'purpose', 'created_date', 'last_verified', 'notes'];
+            $baseDiffFields = ['email_address', 'display_name', 'provider', 'type', 'purpose', 'created_date', 'last_verified', 'notes', 'visibility'];
             foreach ($baseDiffFields as $f) {
                 $old = (string) ($email[$f] ?? '');
                 if ($old !== $form[$f]) {
@@ -96,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare('UPDATE emails SET
                 email_address = :email_address, display_name = :display_name, provider = :provider,
                 type = :type, purpose = :purpose, status = :status, created_date = :created_date,
-                last_verified = :last_verified, notes = :notes
+                last_verified = :last_verified, notes = :notes, visibility = :visibility
                 WHERE id = :id');
             $stmt->execute([
                 'email_address' => $form['email_address'],
@@ -108,6 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'created_date' => $form['created_date'] !== '' ? $form['created_date'] : null,
                 'last_verified' => $form['last_verified'] !== '' ? $form['last_verified'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'id' => $id,
             ]);
 
@@ -200,6 +212,16 @@ require __DIR__ . '/../../includes/header.php';
                 <label class="form-label"><?= e(t('common.field_last_verified')) ?></label>
                 <input type="date" name="last_verified" class="form-control" value="<?= e($form['last_verified']) ?>">
             </div>
+            <?php if ($canManageVisibility): ?>
+                <div class="col-md-3">
+                    <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                    <select name="visibility" class="form-select">
+                        <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                        <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                    </select>
+                    <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
+                </div>
+            <?php endif; ?>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>
                 <textarea name="notes" class="form-control" rows="2"><?= e($form['notes']) ?></textarea>
