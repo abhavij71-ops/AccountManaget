@@ -88,6 +88,7 @@ $accounts = $stmt->fetchAll();
 
 $totalCount = (int) $pdo->query('SELECT COUNT(*) FROM accounts WHERE ' . visibilityScope('accounts'))->fetchColumn();
 $services = $pdo->query('SELECT id, service_name FROM services WHERE ' . visibilityScope('services') . ' ORDER BY service_name')->fetchAll();
+$hiddenPrivateCount = hiddenPrivateRecordsCount('accounts');
 
 function accountSortLink(string $col, string $label, string $sort, string $dir): string
 {
@@ -112,6 +113,10 @@ require __DIR__ . '/../../includes/header.php';
         <a href="add.php" class="btn btn-outline-primary btn-sm"><?= e(t('accounts.full_form')) ?></a>
     </div>
 </div>
+
+<?php if ($hiddenPrivateCount > 0): ?>
+    <p class="text-muted small mb-3"><?= e(t('common.hidden_private_records_notice', ['count' => $hiddenPrivateCount])) ?></p>
+<?php endif; ?>
 
 <form method="get" class="row g-2 mb-3">
     <div class="col-md-3">

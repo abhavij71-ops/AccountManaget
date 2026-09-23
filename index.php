@@ -16,6 +16,8 @@ $servicesCount = (int) $pdo->query('SELECT COUNT(*) FROM services')->fetchColumn
 $accountsCount = (int) $pdo->query('SELECT COUNT(*) FROM accounts WHERE is_archived = 0')->fetchColumn();
 $paidAccountsCount = (int) $pdo->query("SELECT COUNT(*) FROM subscriptions WHERE type = 'Paid' AND status = 'Active'")->fetchColumn();
 
+$hiddenPrivateCount = array_sum(array_map('hiddenPrivateRecordsCount', VISIBILITY_SCOPED_TABLES));
+
 $needsAttentionItems = getNeedsAttentionItems($pdo);
 $needsAttentionSummary = needsAttentionSummary($needsAttentionItems);
 
@@ -43,6 +45,10 @@ $pageTitle = t('nav.dashboard');
 require __DIR__ . '/includes/header.php';
 ?>
 <h1 class="h4 mb-4"><?= e(t('nav.dashboard')) ?></h1>
+
+<?php if ($hiddenPrivateCount > 0): ?>
+    <p class="text-muted small mb-3"><?= e(t('common.hidden_private_records_notice', ['count' => $hiddenPrivateCount])) ?></p>
+<?php endif; ?>
 
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-2">
