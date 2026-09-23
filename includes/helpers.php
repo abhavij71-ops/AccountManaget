@@ -317,6 +317,40 @@ function log_history(
     $stmt->execute([$entityType, $entityId, $action, $fieldName, $oldValue, $newValue, currentUserId()]);
 }
 
+/**
+ * Records ACCESS, not change: who viewed or exported which record, and when
+ * — the platform-level audit_log table, distinct from log_history() above.
+ * `history` (workspace-scoped) says what data changed and to what; this
+ * says who looked at or pulled data out, which `history` was never designed
+ * to capture and a data-change log can't retroactively provide.
+ *
+ * Lives in platformDb(), not the workspace db(), because it spans every
+ * workspace a user touches — $entityType/$entityId reference a row in
+ * whichever workspace database was active at the time (recorded alongside
+ * via currentWorkspaceId()), not a row in the central database itself, so
+ * there's no (and can't be a) foreign key tying them together.
+ *
+ * Intended call sites are every view.php (action 'view') and every export
+ * endpoint (action 'export') — not yet wired in anywhere, since those files
+ * weren't in scope for this change.
+ *
+ * @param string $action e.g. 'view', 'export'
+ * @param string|null $entityType e.g. 'email','service','account','phone' — null for an export not tied to one row
+ * @param int|null $entityId null when not applicable (e.g. a bulk CSV export)
+ */
+function auditLog(string $action, ?string $entityType = null, ?int $entityId = null): void
+{
+    $userId = currentUserId();
+    if ($userId === null) {
+        return;
+    }
+
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    platformDb()->prepare(
+        'INSERT INTO audit_log (user_id, workspace_id, action, entity_type, entity_id, ip) VALUES (?, ?, ?, ?, ?, ?)'
+    )->execute([$userId, currentWorkspaceId(), $action, $entityType, $entityId, $ip]);
+}
+
 const VISIBILITY_SCOPED_TABLES = ['emails', 'services', 'accounts', 'phones'];
 
 /**
@@ -350,6 +384,33 @@ function visibilityScope(string $table): string
 
     $userId = (int) currentUserId();
     return "({$table}.visibility = 'workspace' OR ({$table}.visibility = 'private' AND {$table}.owner_user_id = {$userId}))";
+}
+
+/**
+ * Count of records in $table that are 'private' and not owned by the
+ * current user (including a private record with no recorded owner at
+ * all) — i.e. exactly what visibilityScope() is hiding from them right
+ * now. Always 0 for owner/admin, since nothing is hidden from them.
+ * Deliberately returns a bare count only — callers must never surface
+ * which records, who owns them, or any other detail alongside it.
+ */
+function hiddenPrivateRecordsCount(string $table): int
+{
+    if (!in_array($table, VISIBILITY_SCOPED_TABLES, true)) {
+        throw new InvalidArgumentException("hiddenPrivateRecordsCount(): unrecognized table \"{$table}\"");
+    }
+
+    $role = currentRole();
+    if ($role === 'owner' || $role === 'admin') {
+        return 0;
+    }
+
+    $userId = (int) currentUserId();
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) FROM {$table} WHERE visibility = 'private' AND (owner_user_id IS NULL OR owner_user_id != ?)"
+    );
+    $stmt->execute([$userId]);
+    return (int) $stmt->fetchColumn();
 }
 
 /**
