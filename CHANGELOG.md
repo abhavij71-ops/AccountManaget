@@ -2,6 +2,13 @@
 
 This project was built in sequential phases, each adding a coherent slice of functionality. Dates are omitted since this reflects build order, not a dated release history. Starting with v1.1.0, changes are tracked under semantic version numbers (`APP_VERSION` in `config.php`, shown in the sidebar and in Settings → درباره سیستم).
 
+**Two tracks, one file, going forward.** As of the `single-user`/`main` split (see [docs/BRANCHING.md](docs/BRANCHING.md)), `v1.x.x` (single-user, fixes only) and `v2.x.x` (SaaS, active development) both get new entries, but at very different paces. Everything below this point (v1.0.0 through v1.12.0) is shared history — both editions were that codebase before the split. From here on:
+
+- New `v2.x.x` entries keep being added at the top, exactly as before.
+- New `v1.x.x` entries (rare — fixes only) get their own short, clearly-labeled run wherever they land chronologically, e.g. a one-line `## v1.12.1 (single-user)` heading — never silently interleaved with `v2.x.x` entries under a bare version number that leaves the reader guessing which edition it applies to.
+
+One file, not two, because the shared v1.0.0–v1.12.0 history has real value as a single continuous record, and a reader tracing *when* something was fixed shouldn't have to cross-reference two files to get the full timeline. The `(single-user)`/no-suffix convention (SaaS entries stay unmarked, since `main`'s changelog is the default reading) is what keeps the two tracks visually distinguishable without duplicating the file.
+
 ## v2.1.0
 
 Implements most of `docs/ROADMAP-SAAS.md` Phase 13 ("SaaS-grade security hardening"), plus the Phase 12 "when a member leaves" workflow and a small privacy-transparency notice. Entirely additive on top of v2.0.0 — no manual upgrade step, no breaking changes; every new table/column is picked up automatically by the existing migration runner.

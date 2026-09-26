@@ -63,3 +63,43 @@ function fetchRenewals(PDO $pdo, int $upcomingDays = 30): array
         'upcoming_days' => $upcomingDays,
     ];
 }
+
+/**
+ * Possibly-unused paid subscriptions: Active Paid subscriptions on accounts
+ * whose last_login is missing or older than $idleDays. Only Monthly-cycle
+ * subscriptions count toward the "monthly cost total" per currency — spec
+ * sec. 30 forbids summing across currencies or silently combining billing
+ * cycles, so Yearly-cycle rows are listed but excluded from that total.
+ */
+function fetchPossiblyUnusedSubscriptions(PDO $pdo, int $idleDays = 90): array
+{
+    $cutoff = date('Y-m-d H:i:s', strtotime("-{$idleDays} days"));
+
+    $stmt = $pdo->prepare(
+        "SELECT sub.id AS subscription_id, sub.account_id, sub.price, sub.currency, sub.billing_cycle,
+                a.username, a.display_name, a.last_login, s.service_name, e.email_address
+         FROM subscriptions sub
+         JOIN accounts a ON a.id = sub.account_id
+         JOIN services s ON s.id = a.service_id
+         JOIN emails e ON e.id = a.email_id
+         WHERE sub.type = 'Paid' AND sub.status = 'Active' AND a.is_archived = 0
+               AND (a.last_login IS NULL OR a.last_login < :cutoff)
+         ORDER BY a.last_login IS NOT NULL, a.last_login ASC"
+    );
+    $stmt->execute(['cutoff' => $cutoff]);
+    $rows = $stmt->fetchAll();
+
+    $monthlyTotals = [];
+    foreach ($rows as $row) {
+        if ($row['billing_cycle'] === 'Monthly' && $row['price'] !== null && $row['currency']) {
+            $monthlyTotals[$row['currency']] = ($monthlyTotals[$row['currency']] ?? 0) + (float) $row['price'];
+        }
+    }
+    ksort($monthlyTotals);
+
+    return [
+        'accounts' => $rows,
+        'monthly_totals' => $monthlyTotals,
+        'idle_days' => $idleDays,
+    ];
+}

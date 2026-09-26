@@ -4,11 +4,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/../../includes/plans.php';
 
 requireLogin();
 
 $pdo = db();
 $errors = [];
+$planLimitReached = false;
 $form = [
     'service_id' => '',
     'identity_type' => 'email',
@@ -131,7 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = t('accounts.last4_invalid');
     }
 
-    if (!$errors) {
+    if (!$errors && !checkPlanLimit('accounts', null, $pdo)) {
+        $planLimitReached = true;
+    }
+
+    if (!$errors && !$planLimitReached) {
         try {
             $pdo->beginTransaction();
 
@@ -236,6 +242,13 @@ require __DIR__ . '/../../includes/header.php';
         <ul class="mb-0">
             <?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?>
         </ul>
+    </div>
+<?php endif; ?>
+
+<?php if ($planLimitReached): ?>
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><?= e(t('plans.limit_accounts_reached')) ?></span>
+        <a href="<?= e(appUrl('plans.php')) ?>" class="btn btn-sm btn-primary"><?= e(t('plans.upgrade_button')) ?></a>
     </div>
 <?php endif; ?>
 

@@ -129,6 +129,13 @@ $bs = currentTextDirection() === 'rtl' ? 'bootstrap.rtl.min.css' : 'bootstrap.mi
 
                 <button type="submit" class="btn btn-primary w-100"><?= e(t('login.submit_button')) ?></button>
             </form>
+
+            <p class="text-center text-muted small mt-3 mb-1">
+                <a href="<?= e(appUrl('forgot-password.php')) ?>"><?= e(t('login.forgot_password_link')) ?></a>
+            </p>
+            <p class="text-center text-muted small mb-0">
+                <a href="<?= e(appUrl('register.php')) ?>"><?= e(t('login.create_account_link')) ?></a>
+            </p>
         </div>
     </div>
 </body>

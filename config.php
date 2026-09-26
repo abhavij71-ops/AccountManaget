@@ -56,6 +56,19 @@ if ($__isHttps) {
  */
 define('CRON_BACKUP_TOKEN', (string) (getenv('CRON_BACKUP_TOKEN') ?: ''));
 
+// Same rationale, separate secret so leaking one token doesn't hand over
+// the other job — cron-mail.php checks incoming requests against this one.
+define('CRON_MAIL_TOKEN', (string) (getenv('CRON_MAIL_TOKEN') ?: ''));
+
+/**
+ * Symmetric key used to encrypt the SMTP password before it's stored in
+ * app_settings (includes/mail.php's encryptSecret()/decryptSecret()) —
+ * never plain-text, per spec. Read from the environment for the same
+ * reason as CRON_BACKUP_TOKEN above. Empty means saveSmtpSettings() refuses
+ * to store a password rather than silently storing it unencrypted.
+ */
+define('MAIL_ENCRYPTION_KEY', (string) (getenv('MAIL_ENCRYPTION_KEY') ?: ''));
+
 if (session_status() === PHP_SESSION_NONE) {
     session_name(SESSION_NAME);
     session_set_cookie_params([

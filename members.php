@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/plans.php';
 
 requireRole('owner', 'admin');
 
@@ -44,6 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flashSet('danger', t('members.invite_email_invalid'));
         } elseif (!in_array($role, $assignableRoles, true)) {
             flashSet('danger', t('members.invite_role_invalid'));
+        } elseif (!checkPlanLimit('members', $workspaceId)) {
+            flashSet('danger', t('plans.limit_members_reached'));
         } else {
             $memberCheck = $platform->prepare(
                 'SELECT 1 FROM memberships m JOIN accounts_users u ON u.id = m.user_id
@@ -129,6 +132,8 @@ $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' :
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $absoluteBase = $scheme . '://' . $host;
 
+$memberLimitReached = !checkPlanLimit('members', $workspaceId);
+
 $csrf = csrfToken();
 $pageTitle = t('members.title');
 require __DIR__ . '/includes/header.php';
@@ -192,6 +197,12 @@ require __DIR__ . '/includes/header.php';
 <div class="card am-card mb-4">
     <div class="card-header bg-white fw-bold"><?= e(t('members.invite_title')) ?></div>
     <div class="card-body">
+        <?php if ($memberLimitReached): ?>
+            <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span><?= e(t('plans.limit_members_reached')) ?></span>
+                <a href="<?= e(appUrl('plans.php')) ?>" class="btn btn-sm btn-primary"><?= e(t('plans.upgrade_button')) ?></a>
+            </div>
+        <?php endif; ?>
         <form method="post" class="row g-2 align-items-end">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="invite">
