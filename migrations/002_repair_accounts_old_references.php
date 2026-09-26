@@ -2,21 +2,46 @@
 declare(strict_types=1);
 
 /**
- * Rebuilds one table via rename -> create (correct DDL) -> copy -> drop ->
- * recreate indexes/trigger, guarded by legacy_alter_table so this rename
- * doesn't itself corrupt some other table's REFERENCES clause the same way.
- * Runs inside the transaction runMigrations() already holds open.
+ * Repairs databases where the identity-anchor migration hit the SQLite
+ * >=3.25 bug above before the legacy_alter_table fix existed: renaming
+ * "accounts" silently rewrote six other tables' REFERENCES clauses to point
+ * at "accounts_old", which was then dropped, leaving every one of them
+ * referencing a table that no longer exists. With PRAGMA foreign_keys = ON
+ * (set on every connection — see db()), any INSERT/UPDATE against those
+ * tables now fails with "no such table: main.accounts_old".
  *
- * @param array{ddl:string,columns:string[],indexes:array<string,string>,trigger:bool} $spec
+ * Detection and repair are the same query: any table whose stored DDL still
+ * mentions accounts_old is broken and gets rebuilt; once every affected
+ * table is fixed, the scan finds nothing and this becomes a no-op — no
+ * separate "has this run" flag needed.
+ *
+ * rebuildTableReferencingAccounts is a local closure, not a top-level named
+ * function — loadMigrations() (includes/migrator.php) `require`s this file
+ * at most once per process now, but this migration is kept safe on its own
+ * too: a named top-level function here would fatal with "Cannot redeclare"
+ * the moment anything `require`s this file a second time.
  */
-function rebuildTableReferencingAccounts(PDO $pdo, string $table, array $spec): void
-{
-    $oldTable = $table . '_old';
-    $cols = implode(', ', $spec['columns']);
+return function (PDO $pdo): void {
+    $affected = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%accounts_old%'")
+        ->fetchAll(PDO::FETCH_COLUMN);
+    if (!$affected) {
+        return;
+    }
 
-    $pdo->exec('PRAGMA legacy_alter_table = ON');
-    $pdo->exec('PRAGMA foreign_keys = OFF');
-    try {
+    /**
+     * Rebuilds one table via rename -> create (correct DDL) -> copy -> drop
+     * -> recreate indexes/trigger. Requires PRAGMA foreign_keys = OFF and
+     * PRAGMA legacy_alter_table = ON to already be set on $pdo —
+     * runMigrations() sets both once for the whole migration batch, outside
+     * any transaction, since SQLite silently ignores both pragmas once a
+     * transaction is already open.
+     *
+     * @param array{ddl:string,columns:string[],indexes:array<string,string>,trigger:bool} $spec
+     */
+    $rebuildTableReferencingAccounts = function (PDO $pdo, string $table, array $spec): void {
+        $oldTable = $table . '_old';
+        $cols = implode(', ', $spec['columns']);
+
         $pdo->exec("ALTER TABLE {$table} RENAME TO {$oldTable}");
 
         foreach (array_keys($spec['indexes']) as $indexName) {
@@ -43,37 +68,11 @@ function rebuildTableReferencingAccounts(PDO $pdo, string $table, array $spec): 
                     UPDATE {$table} SET updated_at = datetime('now') WHERE id = NEW.id;
                 END");
         }
-    } finally {
-        $pdo->exec('PRAGMA foreign_keys = ON');
-        $pdo->exec('PRAGMA legacy_alter_table = OFF');
-    }
-}
+    };
 
-/**
- * Repairs databases where the identity-anchor migration hit the SQLite
- * >=3.25 bug above before the legacy_alter_table fix existed: renaming
- * "accounts" silently rewrote six other tables' REFERENCES clauses to point
- * at "accounts_old", which was then dropped, leaving every one of them
- * referencing a table that no longer exists. With PRAGMA foreign_keys = ON
- * (set on every connection — see db()), any INSERT/UPDATE against those
- * tables now fails with "no such table: main.accounts_old".
- *
- * Detection and repair are the same query: any table whose stored DDL still
- * mentions accounts_old is broken and gets rebuilt; once every affected
- * table is fixed, the scan finds nothing and this becomes a no-op — no
- * separate "has this run" flag needed.
- */
-return function (PDO $pdo): void {
-    $affected = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%accounts_old%'")
-        ->fetchAll(PDO::FETCH_COLUMN);
-    if (!$affected) {
-        return;
-    }
-
-    backupDatabaseFile($pdo);
-
-    // DDL copied verbatim from installSchemaStatements() in install.php — the correct,
-    // never-corrupted definition of each table, restoring `REFERENCES accounts(id)`.
+    // DDL copied verbatim from installSchemaStatements() in includes/schema.php —
+    // the correct, never-corrupted definition of each table, restoring
+    // `REFERENCES accounts(id)`.
     $rebuilds = [
         'account_security' => [
             'ddl' => "CREATE TABLE account_security (
@@ -193,7 +192,7 @@ return function (PDO $pdo): void {
 
     foreach ($rebuilds as $table => $spec) {
         if (in_array($table, $affected, true)) {
-            rebuildTableReferencingAccounts($pdo, $table, $spec);
+            $rebuildTableReferencingAccounts($pdo, $table, $spec);
         }
     }
 

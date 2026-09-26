@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/secrets.php';
 require_once __DIR__ . '/includes/platform-db.php';
 require_once __DIR__ . '/includes/renewals.php';
 require_once __DIR__ . '/includes/security-score.php';
@@ -10,42 +11,49 @@ require_once __DIR__ . '/includes/notify.php';
 
 /**
  * Every nightly job, run in order and logged as one row in cron_runs
- * (central database):
- *   1. Flush the mail queue (max 50 messages — includes/mail.php's
- *      sendQueuedMail(), never more than one batch per run).
- *   2. Check each workspace's upcoming/overdue renewals (fetchRenewals(),
- *      includes/renewals.php) and queue a notification email to that
- *      workspace's owners/admins when there's something to flag. There is
- *      no dedicated notifications table in this codebase yet, so
- *      "create notifications" is implemented as queueMail() — the same
- *      queue job 1 drains — rather than inventing a new table this script
- *      can't also migrate (see note above recomputeSecurityScores() for the
- *      same reasoning applied to score storage).
- *   3. Recompute security scores (calcEmailSecurityScore()/
- *      calcPhoneSecurityScore(), includes/security-score.php) for every
- *      email/phone that has a security row, per workspace.
+ * (central database). This used to be three separate scripts — cron.php,
+ * cron-backup.php, cron-mail.php — each gated by its own getenv()-only
+ * token, which meant every one of them was permanently unusable on any
+ * host that can't set environment variables (most shared hosting). Merged
+ * into this one file with one token, read through loadSecret()
+ * (includes/secrets.php) so it also works from account-manager-secrets.php
+ * — see docs/SECRETS.md. Safe to merge now that includes/migrator.php's
+ * loadMigrations() caches per process: this script opens many workspace
+ * databases in a single PHP process, and without that cache a second
+ * workspace's migration run would re-`require` every migration file and
+ * fatal on any one that declares a top-level named function.
+ *
+ *   1. Flush the mail queue (max 50 messages — sendQueuedMail()). This
+ *      alone was cron-mail.php's entire job; that file added nothing this
+ *      step didn't already do, so it's gone with no replacement needed.
+ *   2. Check each workspace's upcoming/overdue renewals and queue a
+ *      notification to that workspace's owners/admins.
+ *   3. Recompute security scores per workspace.
  *   4. Purge expired invitation tokens, idle session tokens, and old
  *      login_attempts rows from the central database.
- *   5. Run cron-backup.php's own backup+retention logic in-process.
+ *   5. Back up every workspace database plus the central platform
+ *      database, compressed, into data/backups/, then purge backups older
+ *      than BACKUP_RETENTION_DAYS — cron-backup.php's logic, now native
+ *      code here instead of a separate script this file had to hand its
+ *      own token to just to get past that script's own gate.
  *
  * Invocation: `php cron.php` from a real terminal needs no token. Over
- * HTTP, pass ?token=<CRON_TOKEN> or an X-Cron-Token header — same
- * shared-secret pattern as cron-backup.php's CRON_BACKUP_TOKEN, but its own
- * separate secret (set the CRON_TOKEN environment variable) so leaking one
- * job's token doesn't hand over the other.
+ * HTTP, pass ?token=<CRON_TOKEN> or an X-Cron-Token header.
  */
 
 $isCli = PHP_SAPI === 'cli';
 
 if (!$isCli) {
     header('Content-Type: text/plain; charset=UTF-8');
-    $cronToken = (string) (getenv('CRON_TOKEN') ?: '');
+    $cronToken = loadSecret('CRON_TOKEN');
     $providedToken = (string) ($_SERVER['HTTP_X_CRON_TOKEN'] ?? $_GET['token'] ?? '');
     if ($cronToken === '' || !hash_equals($cronToken, $providedToken)) {
         http_response_code(403);
         die('Forbidden');
     }
 }
+
+const BACKUP_RETENTION_DAYS = 30;
 
 /**
  * Runs $job, records whether it threw, and never lets one job's failure
@@ -66,8 +74,7 @@ function cronStep(array &$report, bool &$hadFailure, string $label, callable $jo
  * A raw, throwaway connection to one workspace's SQLite file — never
  * db()/platformDb() for workspace data, since both tie to session/current-
  * workspace state that doesn't exist in this unauthenticated, cron-
- * triggered context (same reasoning as cron-backup.php's
- * backupOneDatabase()).
+ * triggered context.
  */
 function openWorkspaceDb(string $path): ?PDO
 {
@@ -150,12 +157,8 @@ function notifyRenewalsForWorkspace(PDO $platform, string $workspaceFileStem, ar
 
 /**
  * Refreshes cached security-score columns from the pure calculators in
- * includes/security-score.php. Those functions only ever computed a score
- * from an in-memory array before now — there's no confirmed
- * emails.security_score/phones.security_score column in the schema this
- * script is allowed to inspect, so both are gated behind columnExists()
- * and simply no-op (report 0 updated) until such a column exists, rather
- * than guessing at a schema change here.
+ * includes/security-score.php. Gated behind columnExists() and simply
+ * no-ops (reports 0 updated) until such a column exists.
  */
 function recomputeSecurityScores(PDO $pdo): int
 {
@@ -180,6 +183,50 @@ function recomputeSecurityScores(PDO $pdo): int
     }
 
     return $updated;
+}
+
+/**
+ * Flushes WAL into the main file via a throwaway raw connection, then
+ * gzip-copies the now self-consistent file. Checkpointing first means the
+ * -wal/-shm sidecar files never need to be part of the backup at all.
+ * Folded in from the old cron-backup.php verbatim.
+ */
+function backupOneDatabase(string $sourcePath, string $destPathGz): bool
+{
+    if (!file_exists($sourcePath)) {
+        return false;
+    }
+
+    try {
+        $pdo = new PDO('sqlite:' . $sourcePath);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (Throwable $e) {
+        error_log('Account Manager: cron.php backup checkpoint failed for ' . $sourcePath . ': ' . $e->getMessage());
+        return false;
+    } finally {
+        $pdo = null; // release the connection/lock before copying the file below
+    }
+
+    $source = fopen($sourcePath, 'rb');
+    if ($source === false) {
+        return false;
+    }
+    $dest = gzopen($destPathGz, 'wb9');
+    if ($dest === false) {
+        fclose($source);
+        return false;
+    }
+    while (!feof($source)) {
+        $chunk = fread($source, 1024 * 1024);
+        if ($chunk === false) {
+            break;
+        }
+        gzwrite($dest, $chunk);
+    }
+    fclose($source);
+    gzclose($dest);
+    return true;
 }
 
 $platform = platformDb();
@@ -257,7 +304,7 @@ cronStep($report, $hadFailure, 'purge', function () use ($platform) {
     }
 
     if (tableExists($platform, 'login_attempts')) {
-        $stmt = $platform->prepare('DELETE FROM login_attempts WHERE created_at < ?');
+        $stmt = $platform->prepare('DELETE FROM login_attempts WHERE attempted_at < ?');
         $stmt->execute([date('Y-m-d H:i:s', strtotime('-90 days'))]);
         $purgedAttempts = $stmt->rowCount();
     }
@@ -265,18 +312,43 @@ cronStep($report, $hadFailure, 'purge', function () use ($platform) {
     return "invitations={$purgedInvites} sessions={$purgedSessions} login_attempts={$purgedAttempts}";
 });
 
-// 5. Backups — cron-backup.php's own logic, reused in-process. Only
-// reachable once CRON_BACKUP_TOKEN is confirmed non-empty, so the token
-// check inside cron-backup.php (which die()s the whole process on
-// mismatch) is guaranteed to pass with the token we hand it ourselves.
-cronStep($report, $hadFailure, 'backup', function () {
-    if (CRON_BACKUP_TOKEN === '') {
-        return 'skipped: CRON_BACKUP_TOKEN not configured';
+// 5. Backups (formerly cron-backup.php) — every workspace file plus the
+// central platform database, gzip-compressed, with old backups purged.
+cronStep($report, $hadFailure, 'backup', function () use ($workspaceFiles) {
+    $backupDir = DATA_DIR . '/backups';
+    if (!is_dir($backupDir)) {
+        mkdir($backupDir, 0755, true);
     }
-    $_GET['token'] = CRON_BACKUP_TOKEN;
-    ob_start();
-    require_once __DIR__ . '/cron-backup.php';
-    return trim((string) ob_get_clean());
+
+    $timestamp = date('Ymd_His');
+    $sources = [];
+    if (file_exists(DATA_DIR . '/platform.sqlite')) {
+        $sources['platform'] = DATA_DIR . '/platform.sqlite';
+    }
+    foreach ($workspaceFiles as $workspaceFile) {
+        $sources[basename($workspaceFile, '.sqlite')] = $workspaceFile;
+    }
+
+    $okCount = 0;
+    $failCount = 0;
+    foreach ($sources as $label => $sourcePath) {
+        $destPath = $backupDir . '/' . $label . '_' . $timestamp . '.sqlite.gz';
+        if (backupOneDatabase($sourcePath, $destPath)) {
+            $okCount++;
+        } else {
+            $failCount++;
+        }
+    }
+
+    $cutoff = time() - (BACKUP_RETENTION_DAYS * 86400);
+    $purged = 0;
+    foreach (glob($backupDir . '/*.sqlite.gz') ?: [] as $backupFile) {
+        if (filemtime($backupFile) < $cutoff && unlink($backupFile)) {
+            $purged++;
+        }
+    }
+
+    return "{$okCount} backed up, {$failCount} failed, {$purged} old backup(s) purged";
 });
 
 $status = $hadFailure ? 'partial' : 'success';

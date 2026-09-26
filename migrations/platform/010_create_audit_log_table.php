@@ -2,22 +2,21 @@
 declare(strict_types=1);
 
 /**
- * A durable trail for sensitive operations — workspace data export,
- * workspace deletion, account deletion (see includes/audit.php's
- * logAuditEvent()) — that must survive the deletion of the very workspace
- * or account it describes. Deliberately no foreign keys on
- * workspace_id/user_id: an audit row is meant to outlive the row it refers
- * to, not be cascade-deleted along with it.
+ * audit_log already exists — migrations/platform/005_add_sessions_and_audit_log.php
+ * creates it with user_id, workspace_id, action, entity_type, entity_id,
+ * ip, created_at. This migration used to `CREATE TABLE IF NOT EXISTS` a
+ * second, incompatible definition of the same table name (adding
+ * `details` but dropping entity_type/entity_id/ip) — a guaranteed no-op
+ * against a table that already exists, so `details` never actually got
+ * added and logAuditEvent() (includes/audit.php) failed on every call with
+ * "table audit_log has no column named details".
+ *
+ * One schema now: everything 005 created, plus this one guarded
+ * ALTER TABLE for the column 005 didn't have.
  */
 return function (PDO $pdo): void {
-    $pdo->exec('CREATE TABLE IF NOT EXISTS audit_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workspace_id INTEGER,
-        user_id INTEGER,
-        action TEXT NOT NULL,
-        details TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
-    )');
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_audit_log_workspace ON audit_log(workspace_id)');
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)');
+    $columns = $pdo->query('PRAGMA table_info(audit_log)')->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('details', $columns, true)) {
+        $pdo->exec('ALTER TABLE audit_log ADD COLUMN details TEXT');
+    }
 };

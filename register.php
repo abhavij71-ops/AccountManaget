@@ -10,13 +10,19 @@ if (isLoggedIn()) {
     exit;
 }
 
+// Off by default, switchable only from admin/settings.php and only right
+// after a successful SMTP test send — enforced here, not just hidden in
+// the UI, so this page refuses new signups even if someone posts to it
+// directly while registration is closed.
+$registrationEnabled = isRegistrationEnabled();
+
 $errors = [];
 $email = '';
 $fullName = '';
 $workspaceName = '';
 $registered = false;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($registrationEnabled && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = strtolower(trim((string) ($_POST['email'] ?? '')));
     $password = (string) ($_POST['password'] ?? '');
     $passwordConfirm = (string) ($_POST['password_confirm'] ?? '');
@@ -76,7 +82,10 @@ $bs = currentTextDirection() === 'rtl' ? 'bootstrap.rtl.min.css' : 'bootstrap.mi
             <h1 class="h4 mb-1 text-center"><?= e(APP_NAME) ?></h1>
             <p class="text-muted text-center mb-4"><?= e(t('register.subtitle')) ?></p>
 
-            <?php if ($registered): ?>
+            <?php if (!$registrationEnabled): ?>
+                <div class="alert alert-info"><?= e(tOr('register.closed', 'Self-service registration is currently closed. Contact your administrator for an invitation.')) ?></div>
+                <a href="<?= e(appUrl('login.php')) ?>" class="btn btn-outline-primary w-100"><?= e(t('login.submit_button')) ?></a>
+            <?php elseif ($registered): ?>
                 <div class="alert alert-success"><?= e(t('register.check_email')) ?></div>
                 <a href="<?= e(appUrl('login.php')) ?>" class="btn btn-outline-primary w-100"><?= e(t('login.submit_button')) ?></a>
             <?php else: ?>

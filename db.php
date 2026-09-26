@@ -18,8 +18,8 @@ function db(): PDO
         exit;
     }
     $workspaceId = (int) $_SESSION['workspace_id'];
-    $workspaceDir = DATA_DIR . '/workspaces';
-    $workspacePath = $workspaceDir . '/ws_' . str_pad((string) $workspaceId, 6, '0', STR_PAD_LEFT) . '.sqlite';
+    $workspacePath = workspaceDatabasePath($workspaceId);
+    $workspaceDir = dirname($workspacePath);
 
     if (!is_dir($workspaceDir)) {
         mkdir($workspaceDir, 0755, true);

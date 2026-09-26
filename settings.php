@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $workspacePath = DATA_DIR . '/workspaces/' . $workspaceId . '.sqlite';
+        $workspacePath = workspaceDatabasePath($workspaceId);
         if (!file_exists($workspacePath)) {
             flashSet('danger', tOr('settings.workspace_download_missing', 'No workspace database file was found.'));
             header('Location: settings.php');
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $checkpointPdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
         $checkpointPdo = null;
 
-        logAuditEvent($workspaceId, currentUserId(), 'workspace.data_downloaded');
+        logAuditEvent('workspace.data_downloaded');
 
         $filename = 'workspace-' . $workspaceId . '-' . date('Y-m-d-His') . '.sqlite';
         header('Content-Type: application/octet-stream');
@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $platform->prepare('DELETE FROM invitations WHERE workspace_id = ?')->execute([$workspaceId]);
             $platform->prepare('DELETE FROM memberships WHERE workspace_id = ?')->execute([$workspaceId]);
             $platform->prepare('DELETE FROM workspaces WHERE id = ?')->execute([$workspaceId]);
-            logAuditEvent($workspaceId, currentUserId(), 'workspace.deleted', ['workspace_name' => $workspaceName]);
+            logAuditEvent('workspace.deleted', details: ['workspace_name' => $workspaceName], workspaceId: $workspaceId);
             $platform->commit();
         } catch (Throwable $e) {
             $platform->rollBack();
@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // The file is deleted only after every central-database row is
         // confirmed gone — the other order risks a workspace record left
         // pointing at nothing if the delete had failed partway.
-        $workspacePath = DATA_DIR . '/workspaces/' . $workspaceId . '.sqlite';
+        $workspacePath = workspaceDatabasePath($workspaceId);
         foreach ([$workspacePath, $workspacePath . '-wal', $workspacePath . '-shm'] as $file) {
             if (file_exists($file)) {
                 unlink($file);
@@ -152,11 +152,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $platform = platformDb();
         $platform->beginTransaction();
         try {
+            // Logged BEFORE the deletes below, not after: audit_log.user_id
+            // still has a real foreign key to accounts_users(id) (migrations/
+            // platform/005_add_sessions_and_audit_log.php) — inserting this
+            // row once that id no longer exists in accounts_users fails the
+            // FK check outright. Note this still means the row this creates
+            // is itself removed by that same FK's ON DELETE CASCADE the
+            // instant the DELETE FROM accounts_users below runs, inside this
+            // same transaction — this reorder only stops the crash, it does
+            // not give account deletion a surviving audit record. Making
+            // that record actually durable needs a schema change (dropping
+            // the CASCADE) beyond what was asked for here.
+            logAuditEvent('account.deleted', userId: $userId);
             $platform->prepare('DELETE FROM memberships WHERE user_id = ?')->execute([$userId]);
             $platform->prepare('DELETE FROM sessions WHERE user_id = ?')->execute([$userId]);
             $platform->prepare('DELETE FROM totp_recovery_codes WHERE user_id = ?')->execute([$userId]);
             $platform->prepare('DELETE FROM accounts_users WHERE id = ?')->execute([$userId]);
-            logAuditEvent(null, $userId, 'account.deleted');
             $platform->commit();
         } catch (Throwable $e) {
             $platform->rollBack();
@@ -276,39 +287,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         session_destroy();
         header('Location: ' . appUrl('login.php'));
         exit;
-    } elseif ($action === 'save_smtp_settings') {
-        if (!$isOwner || !verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-            flashSet('danger', t('msg.invalid_request'));
-            header('Location: settings.php');
-            exit;
-        }
-
-        $host = trim((string) ($_POST['smtp_host'] ?? ''));
-        $port = (int) ($_POST['smtp_port'] ?? 0);
-        $username = trim((string) ($_POST['smtp_username'] ?? ''));
-        $password = (string) ($_POST['smtp_password'] ?? '');
-        $encryption = (string) ($_POST['smtp_encryption'] ?? 'starttls');
-        $fromAddress = trim((string) ($_POST['smtp_from_address'] ?? ''));
-        $fromName = trim((string) ($_POST['smtp_from_name'] ?? ''));
-
-        if ($host === '' || $port <= 0 || $fromAddress === '' || !filter_var($fromAddress, FILTER_VALIDATE_EMAIL)) {
-            flashSet('danger', tOr('settings.smtp_fields_invalid', 'Host, a valid port, and a valid "from" address are required.'));
-        } elseif (!in_array($encryption, ['starttls', 'none'], true)) {
-            flashSet('danger', tOr('settings.smtp_fields_invalid', 'Host, a valid port, and a valid "from" address are required.'));
-        } else {
-            saveSmtpSettings([
-                'smtp_host' => $host,
-                'smtp_port' => (string) $port,
-                'smtp_username' => $username,
-                'smtp_encryption' => $encryption,
-                'smtp_from_address' => $fromAddress,
-                'smtp_from_name' => $fromName,
-            ], $password !== '' ? $password : null);
-            flashSet('success', tOr('settings.smtp_saved_success', 'SMTP settings saved.'));
-        }
-
-        header('Location: settings.php');
-        exit;
     } elseif ($action === 'save_notification_preference') {
         if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
             flashSet('danger', t('msg.invalid_request'));
@@ -327,24 +305,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             saveNotificationPreference(currentUserId(), $channel, $phoneNumber);
             flashSet('success', tOr('settings.notification_saved_success', 'Notification preferences saved.'));
         }
-
-        header('Location: settings.php');
-        exit;
-    } elseif ($action === 'save_sms_provider_settings') {
-        if (!$isOwner || !verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-            flashSet('danger', t('msg.invalid_request'));
-            header('Location: settings.php');
-            exit;
-        }
-
-        $senderNumber = trim((string) ($_POST['sms_sender_number'] ?? ''));
-        $apiKey = (string) ($_POST['sms_api_key'] ?? '');
-
-        setAppSetting('sms_sender_number', $senderNumber);
-        if ($apiKey !== '') {
-            setAppSetting('sms_api_key_encrypted', encryptSecret($apiKey));
-        }
-        flashSet('success', tOr('settings.sms_saved_success', 'SMS provider settings saved.'));
 
         header('Location: settings.php');
         exit;
@@ -397,10 +357,7 @@ $sessionsStmt->execute([currentUserId()]);
 $activeSessions = $sessionsStmt->fetchAll();
 $currentDeviceTokenHash = isset($_SESSION['device_token']) ? hash('sha256', (string) $_SESSION['device_token']) : '';
 
-$smtpSettings = $isOwner ? getSmtpSettings() : [];
 $notificationPreference = getNotificationPreference(currentUserId());
-$smsSenderNumber = $isOwner ? getAppSetting('sms_sender_number') : '';
-$smsApiKeyConfigured = $isOwner && getAppSetting('sms_api_key_encrypted') !== '';
 
 $csrf = csrfToken();
 $pageTitle = t('nav.settings');
@@ -627,76 +584,15 @@ require __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<?php if ($isOwner): ?>
-<div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold"><?= e(tOr('settings.smtp_title', 'Outgoing mail (SMTP)')) ?></div>
-    <div class="card-body">
-        <p class="text-muted small"><?= e(tOr('settings.smtp_description', 'Used to send queued mail. The password is encrypted before it is stored and is never shown again — leave it blank to keep the current one.')) ?></p>
-        <form method="post" class="row g-2">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="action" value="save_smtp_settings">
-            <div class="col-md-8">
-                <label class="form-label"><?= e(tOr('settings.smtp_host', 'SMTP host')) ?></label>
-                <input type="text" name="smtp_host" class="form-control" value="<?= e($smtpSettings['smtp_host']) ?>" required>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label"><?= e(tOr('settings.smtp_port', 'Port')) ?></label>
-                <input type="number" name="smtp_port" class="form-control" value="<?= e($smtpSettings['smtp_port']) ?>" required>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label"><?= e(tOr('settings.smtp_username', 'Username')) ?></label>
-                <input type="text" name="smtp_username" class="form-control" value="<?= e($smtpSettings['smtp_username']) ?>" autocomplete="off">
-            </div>
-            <div class="col-md-6">
-                <label class="form-label"><?= e(tOr('settings.smtp_password', 'Password')) ?></label>
-                <input type="password" name="smtp_password" class="form-control" autocomplete="new-password"
-                       placeholder="<?= $smtpSettings['smtp_password_encrypted'] !== '' ? e(tOr('settings.smtp_password_unchanged', 'Leave blank to keep the current password')) : '' ?>">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label"><?= e(tOr('settings.smtp_encryption', 'Encryption')) ?></label>
-                <select name="smtp_encryption" class="form-select">
-                    <option value="starttls" <?= $smtpSettings['smtp_encryption'] === 'starttls' ? 'selected' : '' ?>>STARTTLS</option>
-                    <option value="none" <?= $smtpSettings['smtp_encryption'] === 'none' ? 'selected' : '' ?>><?= e(tOr('settings.smtp_encryption_none', 'None')) ?></option>
-                </select>
-            </div>
-            <div class="col-md-8">
-                <label class="form-label"><?= e(tOr('settings.smtp_from_address', 'From address')) ?></label>
-                <input type="email" name="smtp_from_address" class="form-control" value="<?= e($smtpSettings['smtp_from_address']) ?>" required>
-            </div>
-            <div class="col-md-8">
-                <label class="form-label"><?= e(tOr('settings.smtp_from_name', 'From name')) ?></label>
-                <input type="text" name="smtp_from_name" class="form-control" value="<?= e($smtpSettings['smtp_from_name']) ?>">
-            </div>
-            <div class="col-md-4 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100"><?= e(tOr('settings.smtp_save_button', 'Save SMTP settings')) ?></button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div class="card am-card mb-3">
-    <div class="card-header bg-white fw-bold"><?= e(tOr('settings.sms_title', 'SMS provider (Kavenegar)')) ?></div>
-    <div class="card-body">
-        <p class="text-muted small"><?= e(tOr('settings.sms_description', 'One shared Kavenegar account for the whole install. The API key is encrypted before it is stored and is never shown again — leave it blank to keep the current one.')) ?></p>
-        <form method="post" class="row g-2">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="action" value="save_sms_provider_settings">
-            <div class="col-md-8">
-                <label class="form-label"><?= e(tOr('settings.sms_api_key', 'API key')) ?></label>
-                <input type="password" name="sms_api_key" class="form-control" autocomplete="new-password"
-                       placeholder="<?= $smsApiKeyConfigured ? e(tOr('settings.sms_api_key_unchanged', 'Leave blank to keep the current key')) : '' ?>">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label"><?= e(tOr('settings.sms_sender_number', 'Sender line')) ?></label>
-                <input type="text" name="sms_sender_number" class="form-control" value="<?= e($smsSenderNumber) ?>">
-            </div>
-            <div class="col-12">
-                <button type="submit" class="btn btn-primary"><?= e(tOr('settings.sms_save_button', 'Save SMS settings')) ?></button>
-            </div>
-        </form>
-    </div>
-</div>
-<?php endif; ?>
+<!--
+    SMTP and SMS provider settings used to live here, gated by $isOwner —
+    but $isOwner means "owner of the CURRENT WORKSPACE", while both were
+    writes to platform-wide app_settings shared by every tenant. Any
+    self-registered user owns their own workspace, so this let a stranger
+    who had just signed up point every tenant's outgoing mail (and SMS) at
+    their own server. Moved to admin/settings.php, behind
+    requireAdminAuth() — see that file.
+-->
 
 <div class="card am-card border-danger mb-3">
     <div class="card-header bg-white fw-bold text-danger"><?= e(tOr('settings.danger_zone_title', 'Danger zone')) ?></div>

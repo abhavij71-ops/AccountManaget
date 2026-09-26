@@ -40,6 +40,7 @@ foreach ($platform->query(
     $subscriptionStatus[(int) $row['workspace_id']] = $row['status'];
 }
 
+$missingSecrets = missingSecrets();
 $csrf = adminCsrfToken();
 ?>
 <!DOCTYPE html>
@@ -53,10 +54,19 @@ $csrf = adminCsrfToken();
 </head>
 <body>
 <div class="container py-4">
+    <?php if ($missingSecrets): ?>
+        <div class="alert alert-warning">
+            <strong>Missing configuration:</strong> the following secrets are not set —
+            <?= e(implode(', ', $missingSecrets)) ?>. See <code>docs/SECRETS.md</code> for how to set each one.
+        </div>
+    <?php endif; ?>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h4 mb-0">Workspaces</h1>
         <div class="d-flex gap-2">
+            <a href="users.php" class="btn btn-outline-secondary btn-sm">Pending users</a>
             <a href="subscriptions.php" class="btn btn-outline-secondary btn-sm">Pending payments</a>
+            <a href="settings.php" class="btn btn-outline-secondary btn-sm">Settings</a>
             <a href="logout.php" class="btn btn-outline-danger btn-sm">Sign out</a>
         </div>
     </div>
@@ -81,7 +91,7 @@ $csrf = adminCsrfToken();
                 <?php foreach ($workspaces as $w): ?>
                     <?php
                     $workspaceIdInt = (int) $w['id'];
-                    $dbPath = DATA_DIR . '/workspaces/' . $workspaceIdInt . '.sqlite';
+                    $dbPath = workspaceDatabasePath($workspaceIdInt);
                     $dbSize = file_exists($dbPath) ? (int) filesize($dbPath) : 0;
                     $isSuspended = (int) $w['is_suspended'] === 1;
                     ?>

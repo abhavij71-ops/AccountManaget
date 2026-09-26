@@ -318,38 +318,47 @@ function log_history(
 }
 
 /**
- * Records ACCESS, not change: who viewed or exported which record, and when
- * — the platform-level audit_log table, distinct from log_history() above.
- * `history` (workspace-scoped) says what data changed and to what; this
- * says who looked at or pulled data out, which `history` was never designed
- * to capture and a data-change log can't retroactively provide.
+ * Resolves a history.changed_by value to a display name — that column
+ * holds a PLATFORM accounts_users.id (see log_history() above and
+ * migrations/010_drop_history_users_fk.php), never a row in the
+ * workspace's own dead `users` table, so this looks it up in platformDb(),
+ * not $pdo. Returns null for a null id or one no longer in accounts_users
+ * (e.g. a deleted account), so a caller can fall back to a dash rather
+ * than showing nothing.
  *
- * Lives in platformDb(), not the workspace db(), because it spans every
- * workspace a user touches — $entityType/$entityId reference a row in
- * whichever workspace database was active at the time (recorded alongside
- * via currentWorkspaceId()), not a row in the central database itself, so
- * there's no (and can't be a) foreign key tying them together.
- *
- * Intended call sites are every view.php (action 'view') and every export
- * endpoint (action 'export') — not yet wired in anywhere, since those files
- * weren't in scope for this change.
- *
- * @param string $action e.g. 'view', 'export'
- * @param string|null $entityType e.g. 'email','service','account','phone' — null for an export not tied to one row
- * @param int|null $entityId null when not applicable (e.g. a bulk CSV export)
+ * No current history display (the dashboard's recent-activity widget, or
+ * any of the four modules/*\/view.php history sections) actually reads
+ * changed_by yet — they all show action/date/field/old/new only. This is
+ * here so whichever one adds a "changed by" line resolves it correctly
+ * from day one instead of reinventing a lookup against the wrong database.
  */
-function auditLog(string $action, ?string $entityType = null, ?int $entityId = null): void
+function resolveChangedByName(?int $userId): ?string
 {
-    $userId = currentUserId();
     if ($userId === null) {
-        return;
+        return null;
     }
 
-    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
-    platformDb()->prepare(
-        'INSERT INTO audit_log (user_id, workspace_id, action, entity_type, entity_id, ip) VALUES (?, ?, ?, ?, ?, ?)'
-    )->execute([$userId, currentWorkspaceId(), $action, $entityType, $entityId, $ip]);
+    static $cache = [];
+    if (array_key_exists($userId, $cache)) {
+        return $cache[$userId];
+    }
+
+    $stmt = platformDb()->prepare('SELECT full_name, email FROM accounts_users WHERE id = ? LIMIT 1');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+
+    return $cache[$userId] = $row ? (string) ($row['full_name'] ?: $row['email']) : null;
 }
+
+// auditLog() used to live here, recording access (who viewed/exported what,
+// and when) into the platform-level audit_log table. Merged into
+// logAuditEvent() (includes/audit.php) — that file's own, differently-
+// shaped function of the same purpose — into one function, since a table
+// having two divergent schema definitions across two migrations is exactly
+// what caused audit_log to be missing its `details` column in the first
+// place. Call logAuditEvent($action, $entityType, $entityId) for the old
+// auditLog() call shape; it defaults user_id/workspace_id from the current
+// session exactly as auditLog() did.
 
 const VISIBILITY_SCOPED_TABLES = ['emails', 'services', 'accounts', 'phones'];
 

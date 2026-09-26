@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/platform-db.php';
+require_once __DIR__ . '/secrets.php';
 
 /**
  * Writes a message to mail_queue and returns immediately — this is the only
@@ -67,7 +68,7 @@ function decryptSecret(string $encoded): string
 
 function mailEncryptionKey(): string
 {
-    $raw = (string) MAIL_ENCRYPTION_KEY;
+    $raw = loadSecret('MAIL_ENCRYPTION_KEY');
     if ($raw === '') {
         throw new RuntimeException('MAIL_ENCRYPTION_KEY is not configured; refusing to handle an SMTP password.');
     }

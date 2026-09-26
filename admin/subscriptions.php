@@ -38,7 +38,11 @@ $csrf = adminCsrfToken();
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h4 mb-0">Pending manual payments</h1>
-        <a href="index.php" class="btn btn-outline-secondary btn-sm">Workspaces</a>
+        <div class="d-flex gap-2">
+            <a href="index.php" class="btn btn-outline-secondary btn-sm">Workspaces</a>
+            <a href="users.php" class="btn btn-outline-secondary btn-sm">Pending users</a>
+            <a href="settings.php" class="btn btn-outline-secondary btn-sm">Settings</a>
+        </div>
     </div>
 
     <?php if (!$pending): ?>

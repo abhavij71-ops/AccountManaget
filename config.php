@@ -13,6 +13,22 @@ define('APP_ROOT', __DIR__);
 define('DATA_DIR', __DIR__ . '/data');
 define('DB_PATH', DATA_DIR . '/database.sqlite');
 
+/**
+ * The single source of truth for where workspace $id's SQLite file lives
+ * on disk — "ws_" + a 6-digit zero-padded id, matching the naming db()
+ * has always actually used. Every other place that built this path by
+ * hand (includes/workspaces.php, includes/plans.php, admin/index.php,
+ * settings.php) must call this instead: several of them had drifted to a
+ * bare "<id>.sqlite", silently pointing at a file db() would never open.
+ * Defined here, not in db.php or an includes/ file, so it's available
+ * everywhere config.php already is — which is everywhere — with no new
+ * require_once needed at any call site.
+ */
+function workspaceDatabasePath(int $workspaceId): string
+{
+    return DATA_DIR . '/workspaces/ws_' . str_pad((string) $workspaceId, 6, '0', STR_PAD_LEFT) . '.sqlite';
+}
+
 $__docRoot = isset($_SERVER['DOCUMENT_ROOT']) ? str_replace('\\', '/', realpath($_SERVER['DOCUMENT_ROOT']) ?: '') : '';
 $__appRoot = str_replace('\\', '/', realpath(__DIR__) ?: __DIR__);
 $__base = '';
@@ -46,28 +62,14 @@ if ($__isHttps) {
     header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 }
 
-/**
- * The shared secret cron-backup.php checks incoming requests against, read
- * from the environment rather than hardcoded here — this file is committed
- * to a public repository, so a real secret can never live in it directly.
- * Empty (the default when the environment variable isn't set) means
- * cron-backup.php refuses every request rather than falling back to some
- * guessable default.
- */
-define('CRON_BACKUP_TOKEN', (string) (getenv('CRON_BACKUP_TOKEN') ?: ''));
-
-// Same rationale, separate secret so leaking one token doesn't hand over
-// the other job — cron-mail.php checks incoming requests against this one.
-define('CRON_MAIL_TOKEN', (string) (getenv('CRON_MAIL_TOKEN') ?: ''));
-
-/**
- * Symmetric key used to encrypt the SMTP password before it's stored in
- * app_settings (includes/mail.php's encryptSecret()/decryptSecret()) —
- * never plain-text, per spec. Read from the environment for the same
- * reason as CRON_BACKUP_TOKEN above. Empty means saveSmtpSettings() refuses
- * to store a password rather than silently storing it unencrypted.
- */
-define('MAIL_ENCRYPTION_KEY', (string) (getenv('MAIL_ENCRYPTION_KEY') ?: ''));
+// cron.php's shared token, the SMTP/SMS-secret encryption key, the admin
+// panel password, and the ZarinPal merchant id are no longer read here with
+// getenv() only — shared hosting usually can't set environment variables at
+// all, which meant every cron call was refused and an SMTP password could
+// never be saved. All four are read through loadSecret() (includes/
+// secrets.php) at the point each is actually used: an environment variable
+// first, falling back to account-manager-secrets.php one directory above
+// APP_ROOT. See docs/SECRETS.md.
 
 if (session_status() === PHP_SESSION_NONE) {
     session_name(SESSION_NAME);

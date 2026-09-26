@@ -14,14 +14,22 @@ set -euo pipefail
 # git archive's built-in --format=zip needs it either — it writes the zip
 # itself.
 #
+# --worktree-attributes makes git archive read .gitattributes from the
+# working tree instead of from $REF's own commit — required for any tag
+# older than .gitattributes itself (e.g. v1.12.0, the single-user freeze
+# point): without it, none of the export-ignore rules apply at all, and
+# the archive ships docs/masster.md, ROADMAP-SAAS*, DEVELOPMENT*, I18N*,
+# and IDENTITY-MODEL* alongside INSTALLATION*/ABOUT*.
+#
 # Usage:
 #   tools/build-release.sh [ref] [single-user|saas]
 #
 #   ref      Branch, tag, or commit to build from. Defaults to HEAD.
 #   edition  Overrides the auto-detected edition (which just checks whether
 #            $ref's branch name contains "single-user"). Pass it explicitly
-#            when building from a bare tag like v1.12.0, since a tag has no
-#            branch name to detect from.
+#            when building from a tag, e.g. v1.12.0 — `git name-rev`
+#            resolves a tag to "tags/v1.12.0", not a branch name, so
+#            auto-detection has nothing to match "single-user" against.
 #
 # Examples:
 #   tools/build-release.sh v1.12.0 single-user
@@ -54,7 +62,7 @@ OUTPUT="$REPO_ROOT/accountmanager-${VERSION}-${EDITION}.zip"
 
 echo "Building $(basename "$OUTPUT") from ref '$REF' (edition: $EDITION) ..."
 
-git archive --format=zip --output="$OUTPUT" "$REF"
+git archive --worktree-attributes --format=zip --output="$OUTPUT" "$REF"
 
 echo ""
 echo "Built: $OUTPUT"
@@ -64,5 +72,5 @@ echo "unzip/7-Zip/Explorer/Expand-Archive; the build above didn't need one):"
 echo "  [ ] list the archive contents and confirm no *.sqlite / *.bak file appears"
 echo "  [ ] confirm no .git/ directory appears"
 echo "  [ ] data/.htaccess, data/index.php, data/imports/.gitkeep ARE present"
-echo "  [ ] tools/, .github/, .claude/ are absent, and docs/ only has INSTALLATION*/ABOUT* files"
+echo "  [ ] tools/, .github/, .claude/ are absent, and docs/ only has INSTALLATION*/ABOUT*/SECRETS* files"
 echo "  [ ] config.php inside the archive reads APP_VERSION '$VERSION'"

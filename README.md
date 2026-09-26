@@ -17,7 +17,7 @@ Account Manager is maintained as two permanent, parallel editions — not one co
 | For | One person managing their own accounts, no team | Teams and multi-workspace organizations |
 | Version | `v1.x.x` | `v2.x.x` — always the latest release |
 | Status | **Feature-frozen by design** — still receives security and bug fixes | Active development |
-| Download | [`single-user` branch](https://github.com/abhavij71-ops/AccountManaget/tree/single-user) | [Latest release](https://github.com/abhavij71-ops/AccountManaget/releases/latest) |
+| Download | [`single-user` branch](https://github.com/abhavij71-ops/AccountManager/tree/single-user) | [Latest release](https://github.com/abhavij71-ops/AccountManager/releases/latest) |
 
 The single-user edition is **not abandoned**. Feature work now happens only on the SaaS edition — but the single-user edition keeps receiving security and bug fixes indefinitely, so an existing single-user installation is never forced to adopt multi-workspace complexity it doesn't need just to stay secure.
 

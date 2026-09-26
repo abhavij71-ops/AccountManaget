@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/platform-db.php';
-require_once __DIR__ . '/migrator.php';
+require_once __DIR__ . '/workspaces.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/plans.php';
 
@@ -56,42 +56,49 @@ function findValidEmailVerification(string $token): ?array
 }
 
 /**
- * Creates the workspace's own SQLite file under data/workspaces/ and brings
- * it to the latest schema via the same runMigrations() every workspace
- * database goes through (includes/migrator.php) — a brand-new workspace is
- * not a special case, just an empty one.
+ * Same shape as findValidEmailVerification() but keyed by id and with NO
+ * expiry check — this is what backs the admin panel's manual "Approve"
+ * button (admin/users.php), so a broken mail setup (the token email never
+ * arrived, or arrived after expiring) can never permanently lock someone
+ * out. Still requires verified_at IS NULL, so an already-completed signup
+ * can't be re-approved.
  */
-function createAndMigrateWorkspaceDatabase(int $workspaceId): void
+function findPendingEmailVerificationById(int $id): ?array
 {
-    $workspaceDir = DATA_DIR . '/workspaces';
-    if (!is_dir($workspaceDir)) {
-        mkdir($workspaceDir, 0755, true);
-    }
-
-    $pdo = new PDO('sqlite:' . $workspaceDir . '/' . $workspaceId . '.sqlite');
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-    $pdo->exec('PRAGMA foreign_keys = ON');
-    $pdo->exec('PRAGMA journal_mode = WAL');
-    runMigrations($pdo);
+    $stmt = platformDb()->prepare(
+        'SELECT id, user_id, workspace_name FROM email_verifications WHERE id = ? AND verified_at IS NULL'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
 }
 
 /**
- * Completes a verified signup. The workspace database is built FIRST,
- * outside any central-database transaction (a second SQLite file can't
- * share one) — so if that fails, the only side effect is an inert,
- * membership-less workspaces row, never an activated account pointed at a
- * workspace with no backing file. Only once it succeeds are the account
- * activated and ownership granted, atomically.
+ * Self-service registration (register.php) is off by default and can only
+ * be switched on from the admin panel, and only immediately after a
+ * successful SMTP test send (admin/settings.php) — enforced there, not
+ * here; this is just the stored flag both sides read/write.
+ */
+function isRegistrationEnabled(): bool
+{
+    return getAppSetting('registration_enabled', '0') === '1';
+}
+
+/**
+ * Completes a verified signup: createWorkspace() (includes/workspaces.php)
+ * inserts the workspaces row (name, slug, db_file, owner_user_id — all
+ * NOT NULL) and builds its database, all as one step, before anything in
+ * the central database is touched for the account itself — so if it
+ * fails, the only side effect is an inert workspace with no membership
+ * yet, never an activated account pointed at a workspace with no backing
+ * file. Only once it succeeds are the account activated and ownership
+ * granted, atomically.
  */
 function completeEmailVerification(array $verification): void
 {
     $platform = platformDb();
 
-    $platform->prepare('INSERT INTO workspaces (name) VALUES (?)')->execute([$verification['workspace_name']]);
-    $workspaceId = (int) $platform->lastInsertId();
-
-    createAndMigrateWorkspaceDatabase($workspaceId);
+    $workspaceId = createWorkspace($verification['workspace_name'], $verification['user_id']);
 
     // Every workspace defaults to the 'free' plan (see the plans migration)
     // — checked here too, not just at invite/add-account time, so a plan

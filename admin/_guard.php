@@ -43,6 +43,28 @@ function e(?string $value): string
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * @return string[] names of required secrets (loadSecret(), includes/
+ *     secrets.php) that are still empty — surfaced as a dashboard warning
+ *     since each one silently disables a whole feature otherwise (cron
+ *     requests refused, SMTP/SMS password can't be saved, ZarinPal
+ *     payments can't start) rather than erroring loudly anywhere obvious.
+ *     ADMIN_PASSWORD is deliberately excluded: if it were empty, this
+ *     admin session could never have been authenticated in the first
+ *     place, so reaching this code already proves it's set.
+ */
+function missingSecrets(): array
+{
+    $required = ['CRON_TOKEN', 'MAIL_ENCRYPTION_KEY', 'ZARINPAL_MERCHANT_ID'];
+    $missing = [];
+    foreach ($required as $key) {
+        if (loadSecret($key) === '') {
+            $missing[] = $key;
+        }
+    }
+    return $missing;
+}
+
 function formatBytes(int $bytes): string
 {
     $units = ['B', 'KB', 'MB', 'GB'];

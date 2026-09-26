@@ -19,7 +19,7 @@ Account Manager به‌صورت دو نسخهٔ دائمی و موازی نگه�
 | مناسب برای | یک نفر که اکانت‌های خودش را مدیریت می‌کند، بدون تیم | تیم‌ها و سازمان‌های چند-Workspace |
 | نسخه | `v1.x.x` | `v2.x.x` — همیشه آخرین نسخهٔ منتشرشده |
 | وضعیت | **عمداً از نظر امکانات فریزشده** — همچنان رفع مشکلات امنیتی و باگ دریافت می‌کند | توسعهٔ فعال |
-| دانلود | [شاخهٔ `single-user`](https://github.com/abhavij71-ops/AccountManaget/tree/single-user) | [آخرین نسخهٔ منتشرشده](https://github.com/abhavij71-ops/AccountManaget/releases/latest) |
+| دانلود | [شاخهٔ `single-user`](https://github.com/abhavij71-ops/AccountManager/tree/single-user) | [آخرین نسخهٔ منتشرشده](https://github.com/abhavij71-ops/AccountManager/releases/latest) |
 
 نسخهٔ تک‌کاربره **رهاشده نیست**. توسعهٔ امکانات جدید از این پس فقط روی نسخهٔ SaaS انجام می‌شود — اما نسخهٔ تک‌کاربره همچنان و برای همیشه رفع مشکلات امنیتی و باگ دریافت می‌کند، تا یک نصب تک‌کاربرهٔ موجود هرگز مجبور نشود فقط برای امن ماندن، پیچیدگی چند-Workspace را که به آن نیازی ندارد بپذیرد.
 

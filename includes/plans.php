@@ -66,7 +66,7 @@ function checkPlanLimit(string $resource, ?int $workspaceId = null, ?PDO $worksp
         }
         $pdo = $workspacePdo;
         if ($pdo === null) {
-            $path = DATA_DIR . '/workspaces/' . $workspaceId . '.sqlite';
+            $path = workspaceDatabasePath($workspaceId);
             if (!file_exists($path)) {
                 return true;
             }
