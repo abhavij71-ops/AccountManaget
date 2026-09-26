@@ -47,9 +47,9 @@ The `data/` folder holds `database.sqlite`, your entire database. It ships with:
 
 After installing, verify this yourself: visiting `https://yourdomain.com/data/database.sqlite` directly in a browser **must** return a 403 Forbidden, not the raw file. If it doesn't, your host may have `AllowOverride None` set for your directory — contact your host or move `data/` above the web root and update `DATA_DIR` in `config.php` accordingly.
 
-### If you're on Nginx instead of Apache
+### Nginx
 
-`.htaccess` has no effect on Nginx. Add a block like this to your server config instead:
+`.htaccess` has no effect on Nginx — it's an Apache-only mechanism, and `data/.htaccess` and `data/index.php` are silently ignored. Add a block like this to your server config instead, then reload Nginx:
 
 ```nginx
 location /data/ {
@@ -57,6 +57,30 @@ location /data/ {
     return 403;
 }
 ```
+
+Verify it the same way as the Apache case above: `https://yourdomain.com/data/database.sqlite` (or `data/platform.sqlite` on a v2 install) must return 403.
+
+Both the installer (`install.php`) and the admin dashboard (`admin/index.php`) run an automatic exposure self-check on every load: they write a random token under `data/`, then try to fetch it back over HTTP through the app's own URL. A red warning means the token came back — `data/` is genuinely reachable, on Apache or Nginx alike, and needs fixing before anything else. An orange "could not verify" warning means the check's own outbound request failed or was blocked (common on shared hosting) — treat that the same as unverified, not as "safe," and confirm manually with the direct-URL test above.
+
+### Moving `data/` outside the web root
+
+The strongest protection isn't a deny rule at all — it's putting `data/` somewhere no web server configuration could ever serve it, regardless of `.htaccess`, Nginx config, or a host that ignores both. `DATA_DIR` (`config.php`) is fully configurable for exactly this:
+
+1. Move the existing `data/` folder to anywhere outside your document root, e.g. one directory above it: `/home/youruser/account-manager-data/` (a sibling of, not inside, `public_html/`).
+2. Point `DATA_DIR` at the new location the same way every other secret is configured (`docs/SECRETS.md`) — either an environment variable:
+   ```bash
+   DATA_DIR=/home/youruser/account-manager-data
+   ```
+   or an entry in `account-manager-secrets.php` (kept one directory above `APP_ROOT`, never inside the web root):
+   ```php
+   <?php
+   return [
+       'DATA_DIR' => '/home/youruser/account-manager-data',
+   ];
+   ```
+3. Reload the app. `DB_PATH`, `workspaceDatabasePath()`, and every other path this app builds under `data/` all derive from `DATA_DIR`, so nothing else needs to change.
+
+When `DATA_DIR` is outside `APP_ROOT` entirely, the exposure self-check above recognizes there's no URL that could possibly serve it and reports it safe without even attempting the HTTP probe.
 
 ## 5. Log in
 

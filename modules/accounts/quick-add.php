@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/plans.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $errors = [];
+$planLimitReached = false;
 $form = [
     'service_id' => '',
     'identity_type' => 'email',
@@ -18,11 +21,14 @@ $form = [
     'status' => 'Active',
     'plan' => '',
     'notes' => '',
+    'visibility' => 'workspace',
 ];
 
-$services = $pdo->query('SELECT id, service_name FROM services ORDER BY service_name')->fetchAll();
-$emails = $pdo->query('SELECT id, email_address FROM emails ORDER BY email_address')->fetchAll();
-$phones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY phone_number')->fetchAll();
+// Scoped to what the current user may see (docs/PERMISSIONS.md) — see
+// add.php's identical fix for the VERIFIED leak this closes.
+$services = $pdo->query('SELECT id, service_name FROM services WHERE ' . visibilityScope('services') . ' ORDER BY service_name')->fetchAll();
+$emails = $pdo->query('SELECT id, email_address FROM emails WHERE ' . visibilityScope('emails') . ' ORDER BY email_address')->fetchAll();
+$phones = $pdo->query('SELECT id, phone_number, label FROM phones WHERE ' . visibilityScope('phones') . ' ORDER BY phone_number')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -30,8 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
+        if ($key === 'visibility') {
+            continue;
+        }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
+    $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+    $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : 'workspace';
 
     $serviceId = (int) $form['service_id'];
     $emailId = (int) $form['email_id'];
@@ -63,10 +74,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         try {
+            assertCanAddAccounts(1);
+        } catch (PlanLimitException $e) {
+            $planLimitReached = true;
+        }
+    }
+
+    if (!$errors && !$planLimitReached) {
+        try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, identity_value, username, status, notes)
-                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :status, :notes)');
+            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, identity_value, username, status, notes, visibility, owner_user_id)
+                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :status, :notes, :visibility, :owner_user_id)');
             $stmt->execute([
                 'service_id' => $serviceId,
                 'email_id' => $emailId !== 0 ? $emailId : null,
@@ -76,6 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'username' => $form['username'] !== '' ? $form['username'] : null,
                 'status' => $form['status'],
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
+                'owner_user_id' => currentUserId(),
             ]);
             $accountId = (int) $pdo->lastInsertId();
 
@@ -116,6 +137,13 @@ require __DIR__ . '/../../includes/header.php';
         <ul class="mb-0">
             <?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?>
         </ul>
+    </div>
+<?php endif; ?>
+
+<?php if ($planLimitReached): ?>
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><?= e(t('plans.limit_accounts_reached')) ?></span>
+        <a href="<?= e(appUrl('plans.php')) ?>" class="btn btn-sm btn-primary"><?= e(t('plans.upgrade_button')) ?></a>
     </div>
 <?php endif; ?>
 
@@ -199,6 +227,14 @@ require __DIR__ . '/../../includes/header.php';
             <div class="col-md-3">
                 <label class="form-label"><?= e(t('accounts.field_plan')) ?></label>
                 <input type="text" name="plan" class="form-control" value="<?= e($form['plan']) ?>" placeholder="<?= e(t('accounts.quick_plan_placeholder')) ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                <select name="visibility" class="form-select">
+                    <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                    <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                </select>
+                <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
             </div>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>

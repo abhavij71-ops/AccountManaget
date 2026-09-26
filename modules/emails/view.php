@@ -22,6 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    requireEditRecord($email);
+
     $action = (string) ($_POST['action'] ?? '');
 
     if ($action === 'add_tag') {
@@ -44,16 +46,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'link_phone') {
         $phoneId = (int) ($_POST['phone_id'] ?? 0);
         if ($phoneId > 0) {
-            $stmt = $pdo->prepare('INSERT OR IGNORE INTO phone_email (phone_id, email_id) VALUES (?, ?)');
-            $stmt->execute([$phoneId, $id]);
-            $ph = $pdo->prepare('SELECT phone_number FROM phones WHERE id = ?');
+            $ph = $pdo->prepare('SELECT phone_number, visibility, owner_user_id FROM phones WHERE id = ?');
             $ph->execute([$phoneId]);
-            log_history($pdo, 'email', $id, 'Phone Linked', null, null, (string) $ph->fetchColumn());
-            flashSet('success', t('common.phone_linked'));
+            $phoneRow = $ph->fetch();
+            // A hidden id posted by hand must not be linkable — the dropdown
+            // below is scoped, but the POST is re-checked here too.
+            if ($phoneRow && canSeeRecord($phoneRow['visibility'] ?? null, isset($phoneRow['owner_user_id']) ? (int) $phoneRow['owner_user_id'] : null)) {
+                $stmt = $pdo->prepare('INSERT OR IGNORE INTO phone_email (phone_id, email_id) VALUES (?, ?)');
+                $stmt->execute([$phoneId, $id]);
+                log_history($pdo, 'email', $id, 'Phone Linked', null, null, (string) $phoneRow['phone_number']);
+                flashSet('success', t('common.phone_linked'));
+            } else {
+                flashSet('danger', t('msg.invalid_request'));
+            }
         }
     } elseif ($action === 'unlink_phone') {
         $phoneId = (int) ($_POST['phone_id'] ?? 0);
-        $ph = $pdo->prepare('SELECT phone_number FROM phones WHERE id = ?');
+        $ph = $pdo->prepare('SELECT phone_number FROM phones WHERE id = ? AND ' . visibilityScope('phones'));
         $ph->execute([$phoneId]);
         $phoneNumber = $ph->fetchColumn();
         $stmt = $pdo->prepare('DELETE FROM phone_email WHERE phone_id = ? AND email_id = ?');
@@ -85,47 +94,63 @@ $completeness = calcEmailCompleteness($email, $security);
 $issueCount = countEmailSecurityIssues($security);
 
 $recoveryEmail = null;
+$recoveryEmailHidden = false;
 if (!empty($security['recovery_email_id'])) {
-    $stmt = $pdo->prepare('SELECT id, email_address FROM emails WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT id, email_address, visibility, owner_user_id FROM emails WHERE id = ?');
     $stmt->execute([$security['recovery_email_id']]);
-    $recoveryEmail = $stmt->fetch() ?: null;
+    $recoveryEmailRow = $stmt->fetch() ?: null;
+    if ($recoveryEmailRow && canSeeRecord($recoveryEmailRow['visibility'] ?? null, isset($recoveryEmailRow['owner_user_id']) ? (int) $recoveryEmailRow['owner_user_id'] : null)) {
+        $recoveryEmail = $recoveryEmailRow;
+    } elseif ($recoveryEmailRow) {
+        $recoveryEmailHidden = true;
+    }
 }
 
 $recoveryPhone = null;
+$recoveryPhoneHidden = false;
 if (!empty($security['recovery_phone_id'])) {
-    $stmt = $pdo->prepare('SELECT id, phone_number, label FROM phones WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT id, phone_number, label, visibility, owner_user_id FROM phones WHERE id = ?');
     $stmt->execute([$security['recovery_phone_id']]);
-    $recoveryPhone = $stmt->fetch() ?: null;
+    $recoveryPhoneRow = $stmt->fetch() ?: null;
+    if ($recoveryPhoneRow && canSeeRecord($recoveryPhoneRow['visibility'] ?? null, isset($recoveryPhoneRow['owner_user_id']) ? (int) $recoveryPhoneRow['owner_user_id'] : null)) {
+        $recoveryPhone = $recoveryPhoneRow;
+    } elseif ($recoveryPhoneRow) {
+        $recoveryPhoneHidden = true;
+    }
 }
 
 $stmt = $pdo->prepare('SELECT a.id, a.username, a.status, s.id AS service_id, s.service_name
     FROM accounts a JOIN services s ON s.id = a.service_id
-    WHERE a.email_id = ? ORDER BY s.service_name');
+    WHERE a.email_id = ? AND ' . visibilityScope('accounts', 'a') . ' ORDER BY s.service_name');
 $stmt->execute([$id]);
 $accounts = $stmt->fetchAll();
 
 $accountsCount = count($accounts);
-$stmt = $pdo->prepare('SELECT COUNT(DISTINCT service_id) FROM accounts WHERE email_id = ?');
+$stmt = $pdo->prepare('SELECT COUNT(DISTINCT service_id) FROM accounts a WHERE a.email_id = ? AND ' . visibilityScope('accounts', 'a'));
 $stmt->execute([$id]);
 $servicesCount = (int) $stmt->fetchColumn();
 
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM accounts a JOIN subscriptions sub ON sub.account_id = a.id
-    WHERE a.email_id = ? AND sub.type = 'Paid'");
+    WHERE a.email_id = ? AND sub.type = 'Paid' AND " . visibilityScope('accounts', 'a'));
 $stmt->execute([$id]);
 $paidAccountsCount = (int) $stmt->fetchColumn();
 
 $stmt = $pdo->prepare("SELECT DISTINCT s.category FROM accounts a JOIN services s ON s.id = a.service_id
-    WHERE a.email_id = ? AND s.category != 'Not Set' ORDER BY s.category");
+    WHERE a.email_id = ? AND s.category != 'Not Set' AND " . visibilityScope('accounts', 'a') . " ORDER BY s.category");
 $stmt->execute([$id]);
 $usedCategories = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
 $linkedPhonesStmt = $pdo->prepare('SELECT p.id, p.phone_number, p.label FROM phones p
-    JOIN phone_email pe ON pe.phone_id = p.id WHERE pe.email_id = ? ORDER BY p.phone_number');
+    JOIN phone_email pe ON pe.phone_id = p.id WHERE pe.email_id = ? AND ' . visibilityScope('phones', 'p') . ' ORDER BY p.phone_number');
 $linkedPhonesStmt->execute([$id]);
 $linkedPhones = $linkedPhonesStmt->fetchAll();
 $linkedPhoneIds = array_column($linkedPhones, 'id');
 
-$availablePhones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY phone_number')->fetchAll();
+// Scoped to what the current user may see (docs/PERMISSIONS.md) — this
+// dropdown previously offered every phone in the workspace regardless of
+// visibility, the same "hidden record offered in a select" bug as
+// accounts/add.php.
+$availablePhones = $pdo->query('SELECT id, phone_number, label FROM phones WHERE ' . visibilityScope('phones') . ' ORDER BY phone_number')->fetchAll();
 $availablePhones = array_filter($availablePhones, static fn ($p) => !in_array((int) $p['id'], $linkedPhoneIds, true));
 
 $tags = fetchEntityTags($pdo, 'email', $id);
@@ -148,12 +173,14 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
     <div class="d-flex gap-2">
-        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
-        <form method="post" class="d-inline" data-confirm="<?= e(t('emails.delete_confirm')) ?>">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="action" value="delete">
-            <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
-        </form>
+        <?php if (canEditRecord($email['visibility'] ?? null, isset($email['owner_user_id']) ? (int) $email['owner_user_id'] : null)): ?>
+            <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
+            <form method="post" class="d-inline" data-confirm="<?= e(t('emails.delete_confirm')) ?>">
+                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                <input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
+            </form>
+        <?php endif; ?>
         <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
     </div>
 </div>
@@ -262,6 +289,8 @@ require __DIR__ . '/../../includes/header.php';
                     <dd class="col-6">
                         <?php if ($recoveryEmail): ?>
                             <a href="view.php?id=<?= (int) $recoveryEmail['id'] ?>"><?= e($recoveryEmail['email_address']) ?></a>
+                        <?php elseif ($recoveryEmailHidden): ?>
+                            <span class="text-muted fst-italic">(private record)</span>
                         <?php else: ?>
                             <span class="text-muted fst-italic">—</span>
                         <?php endif; ?>
@@ -270,6 +299,8 @@ require __DIR__ . '/../../includes/header.php';
                     <dd class="col-6">
                         <?php if ($recoveryPhone): ?>
                             <a href="../phones/view.php?id=<?= (int) $recoveryPhone['id'] ?>"><?= e($recoveryPhone['phone_number']) ?></a>
+                        <?php elseif ($recoveryPhoneHidden): ?>
+                            <span class="text-muted fst-italic">(private record)</span>
                         <?php else: ?>
                             <span class="text-muted fst-italic">—</span>
                         <?php endif; ?>

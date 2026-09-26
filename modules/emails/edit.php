@@ -14,6 +14,7 @@ $email = $id ? fetchEmailById($pdo, $id) : null;
 if (!$email || !canSeeRecord($email['visibility'] ?? null, isset($email['owner_user_id']) ? (int) $email['owner_user_id'] : null)) {
     notFoundResponse(t('emails.not_found'));
 }
+requireEditRecord($email);
 
 $ownerUserId = isset($email['owner_user_id']) && $email['owner_user_id'] !== null ? (int) $email['owner_user_id'] : null;
 $canManageVisibility = canManageRecordVisibility($ownerUserId);

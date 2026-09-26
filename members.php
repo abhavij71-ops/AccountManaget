@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/plans.php';
+require_once __DIR__ . '/includes/audit.php';
 
 requireRole('owner', 'admin');
 
@@ -27,6 +29,16 @@ function assignableRoles(string $actorRole): array
 $assignableRoles = assignableRoles($actorRole);
 $error = '';
 
+// Absolute, not appUrl()'s root-relative path — this is meant to be copied
+// out of the browser (chat, email) where a relative path is meaningless.
+// Computed before the POST handling below, not after: the invite/
+// regenerate_invite actions both need it to build the one-time plain link
+// they flash, and every POST branch redirects+exits before reaching the
+// code that used to compute this further down.
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$absoluteBase = $scheme . '://' . $host;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         flashSet('danger', t('msg.invalid_request'));
@@ -44,6 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flashSet('danger', t('members.invite_email_invalid'));
         } elseif (!in_array($role, $assignableRoles, true)) {
             flashSet('danger', t('members.invite_role_invalid'));
+        } elseif (!checkPlanLimit('members', $workspaceId)) {
+            flashSet('danger', t('plans.limit_members_reached'));
         } else {
             $memberCheck = $platform->prepare(
                 'SELECT 1 FROM memberships m JOIN accounts_users u ON u.id = m.user_id
@@ -60,13 +74,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ->execute([$workspaceId, $email]);
 
                 $token = bin2hex(random_bytes(32));
-                $expiresAt = date('Y-m-d H:i:s', strtotime('+7 days'));
+                $expiresAt = dbNow('+7 days');
                 $platform->prepare(
-                    'INSERT INTO invitations (workspace_id, email, role, token, expires_at, invited_by)
+                    'INSERT INTO invitations (workspace_id, email, role, token_hash, expires_at, invited_by)
                      VALUES (?, ?, ?, ?, ?, ?)'
-                )->execute([$workspaceId, $email, $role, $token, $expiresAt, $actorUserId]);
+                )->execute([$workspaceId, $email, $role, hash('sha256', $token), $expiresAt, $actorUserId]);
+                logAuditEvent('member.invited', 'invitation', (int) $platform->lastInsertId(), ['email' => $email, 'role' => $role]);
 
-                flashSet('success', t('members.invite_sent_success', ['email' => $email]));
+                // Only sha256($token) is ever stored (same pattern as
+                // includes/password-reset.php) — this is the one and only
+                // moment the plain link exists anywhere outside the
+                // invitee's inbox link, so it's flashed now rather than
+                // ever being reconstructed from the DB again.
+                $link = $absoluteBase . appUrl('accept-invite.php?token=' . $token);
+                flashSet('success', t('members.invite_link_once', ['email' => $email, 'link' => $link]));
             }
         }
     } elseif ($action === 'change_role') {
@@ -91,10 +112,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flashSet('danger', t('members.last_owner_error'));
             } else {
                 $platform->prepare('UPDATE memberships SET role = ? WHERE id = ?')->execute([$newRole, $membershipId]);
+                logAuditEvent('member.role_changed', 'membership', $membershipId, ['target_user_id' => (int) $membership['user_id'], 'old_role' => $membership['role'], 'new_role' => $newRole]);
                 flashSet('success', t('members.role_change_success'));
             }
         } else {
             $platform->prepare('UPDATE memberships SET role = ? WHERE id = ?')->execute([$newRole, $membershipId]);
+            logAuditEvent('member.role_changed', 'membership', $membershipId, ['target_user_id' => (int) $membership['user_id'], 'old_role' => $membership['role'], 'new_role' => $newRole]);
             flashSet('success', t('members.role_change_success'));
         }
     } elseif ($action === 'revoke_invite') {
@@ -102,6 +125,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $platform->prepare('DELETE FROM invitations WHERE id = ? AND workspace_id = ? AND accepted_at IS NULL')
             ->execute([$invitationId, $workspaceId]);
         flashSet('success', t('members.revoke_success'));
+    } elseif ($action === 'regenerate_invite') {
+        // The only way to get the plain link back once the one-time flash
+        // above is gone: issue a fresh token under the same row (old token
+        // stops working the moment this overwrites its hash) and flash it
+        // exactly once, the same as a brand-new invite.
+        $invitationId = (int) ($_POST['invitation_id'] ?? 0);
+        $stmt = $platform->prepare('SELECT * FROM invitations WHERE id = ? AND workspace_id = ? AND accepted_at IS NULL LIMIT 1');
+        $stmt->execute([$invitationId, $workspaceId]);
+        $existingInvite = $stmt->fetch();
+
+        if (!$existingInvite) {
+            flashSet('danger', t('msg.invalid_request'));
+        } else {
+            $token = bin2hex(random_bytes(32));
+            $expiresAt = dbNow('+7 days');
+            $platform->prepare('UPDATE invitations SET token_hash = ?, expires_at = ? WHERE id = ?')
+                ->execute([hash('sha256', $token), $expiresAt, $invitationId]);
+
+            $link = $absoluteBase . appUrl('accept-invite.php?token=' . $token);
+            flashSet('success', t('members.invite_link_once', ['email' => $existingInvite['email'], 'link' => $link]));
+        }
     }
 
     header('Location: members.php');
@@ -123,11 +167,7 @@ $invitesStmt = $platform->prepare(
 $invitesStmt->execute([$workspaceId]);
 $pendingInvites = $invitesStmt->fetchAll();
 
-// Absolute, not appUrl()'s root-relative path — this is meant to be copied
-// out of the browser (chat, email) where a relative path is meaningless.
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$absoluteBase = $scheme . '://' . $host;
+$memberLimitReached = !checkPlanLimit('members', $workspaceId);
 
 $csrf = csrfToken();
 $pageTitle = t('members.title');
@@ -192,6 +232,12 @@ require __DIR__ . '/includes/header.php';
 <div class="card am-card mb-4">
     <div class="card-header bg-white fw-bold"><?= e(t('members.invite_title')) ?></div>
     <div class="card-body">
+        <?php if ($memberLimitReached): ?>
+            <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span><?= e(t('plans.limit_members_reached')) ?></span>
+                <a href="<?= e(appUrl('plans.php')) ?>" class="btn btn-sm btn-primary"><?= e(t('plans.upgrade_button')) ?></a>
+            </div>
+        <?php endif; ?>
         <form method="post" class="row g-2 align-items-end">
             <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
             <input type="hidden" name="action" value="invite">
@@ -221,10 +267,7 @@ require __DIR__ . '/includes/header.php';
             <p class="text-muted mb-0"><?= e(t('members.no_pending_invitations')) ?></p>
         <?php else: ?>
             <?php foreach ($pendingInvites as $inv): ?>
-                <?php
-                $expired = strtotime($inv['expires_at']) <= time();
-                $link = $absoluteBase . appUrl('accept-invite.php?token=' . $inv['token']);
-                ?>
+                <?php $expired = strtotime($inv['expires_at']) <= time(); ?>
                 <div class="mb-3 pb-3 border-bottom">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
                         <div>
@@ -234,16 +277,22 @@ require __DIR__ . '/includes/header.php';
                                 <span class="badge bg-secondary"><?= e(t('members.invite_expired_badge')) ?></span>
                             <?php endif; ?>
                         </div>
-                        <form method="post" data-confirm="<?= e(t('members.revoke_confirm')) ?>">
-                            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-                            <input type="hidden" name="action" value="revoke_invite">
-                            <input type="hidden" name="invitation_id" value="<?= (int) $inv['id'] ?>">
-                            <button type="submit" class="btn btn-sm btn-outline-danger"><?= e(t('members.revoke_button')) ?></button>
-                        </form>
+                        <div class="d-flex gap-2">
+                            <form method="post" data-confirm="<?= e(t('members.regenerate_confirm')) ?>">
+                                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                                <input type="hidden" name="action" value="regenerate_invite">
+                                <input type="hidden" name="invitation_id" value="<?= (int) $inv['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-primary"><?= e(t('members.regenerate_button')) ?></button>
+                            </form>
+                            <form method="post" data-confirm="<?= e(t('members.revoke_confirm')) ?>">
+                                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                                <input type="hidden" name="action" value="revoke_invite">
+                                <input type="hidden" name="invitation_id" value="<?= (int) $inv['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><?= e(t('members.revoke_button')) ?></button>
+                            </form>
+                        </div>
                     </div>
-                    <label class="form-label small text-muted mb-1"><?= e(t('members.invite_link_label')) ?></label>
-                    <input type="text" class="form-control form-control-sm" readonly value="<?= e($link) ?>" onclick="this.select()">
-                    <p class="text-muted small mb-0 mt-1"><?= e(t('members.invite_expires_label')) ?>: <?= e(formatDate($inv['expires_at'], true)) ?></p>
+                    <p class="text-muted small mb-0"><?= e(t('members.invite_expires_label')) ?>: <?= e(formatDate($inv['expires_at'], true)) ?></p>
                 </div>
             <?php endforeach; ?>
         <?php endif; ?>

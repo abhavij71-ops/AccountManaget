@@ -118,7 +118,7 @@ if (!$noLegacyDb && !$alreadyDone && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Grandfathered in: this admin was already trusted under the
                     // single-tenant model, so the upgrade doesn't impose a fresh
                     // email-verification step that never existed before.
-                    date('Y-m-d H:i:s'),
+                    dbNow(),
                     $user['created_at'],
                 ]);
                 $accountUserId = (int) $platform->lastInsertId();

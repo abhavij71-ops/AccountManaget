@@ -28,6 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    requireEditRecord($service);
+
     $action = (string) ($_POST['action'] ?? '');
 
     if ($action === 'add_tag') {
@@ -83,7 +85,7 @@ $stmt = $pdo->prepare("SELECT a.id, a.username, a.status, a.last_verified, a.ide
     LEFT JOIN phones p ON p.id = a.identity_phone_id
     LEFT JOIN subscriptions sub ON sub.account_id = a.id
     LEFT JOIN account_security acs ON acs.account_id = a.id
-    WHERE a.service_id = ?
+    WHERE a.service_id = ? AND " . visibilityScope('accounts', 'a') . "
     ORDER BY COALESCE(e.email_address, p.phone_number, a.username, '')");
 $stmt->execute([$id]);
 $accounts = $stmt->fetchAll();
@@ -110,12 +112,14 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
     <div class="d-flex gap-2">
-        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
-        <form method="post" class="d-inline" data-confirm="<?= e(t('services.delete_confirm')) ?>">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="action" value="delete">
-            <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
-        </form>
+        <?php if (canEditRecord($service['visibility'] ?? null, isset($service['owner_user_id']) ? (int) $service['owner_user_id'] : null)): ?>
+            <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
+            <form method="post" class="d-inline" data-confirm="<?= e(t('services.delete_confirm')) ?>">
+                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                <input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
+            </form>
+        <?php endif; ?>
         <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
     </div>
 </div>

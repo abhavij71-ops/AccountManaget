@@ -11,10 +11,18 @@ requireLogin();
 
 $pdo = db();
 
-$emailsCount = (int) $pdo->query('SELECT COUNT(*) FROM emails')->fetchColumn();
-$servicesCount = (int) $pdo->query('SELECT COUNT(*) FROM services')->fetchColumn();
-$accountsCount = (int) $pdo->query('SELECT COUNT(*) FROM accounts WHERE is_archived = 0')->fetchColumn();
-$paidAccountsCount = (int) $pdo->query("SELECT COUNT(*) FROM subscriptions WHERE type = 'Paid' AND status = 'Active'")->fetchColumn();
+// Every count/list on this page is scoped with visibilityScope() so what a
+// member sees summarized here always matches what they can actually open —
+// VERIFIED bug: an owner's private email was previously counted and listed
+// for a member/viewer who could never open it.
+$emailsCount = (int) $pdo->query('SELECT COUNT(*) FROM emails WHERE ' . visibilityScope('emails'))->fetchColumn();
+$servicesCount = (int) $pdo->query('SELECT COUNT(*) FROM services WHERE ' . visibilityScope('services'))->fetchColumn();
+$accountsCount = (int) $pdo->query('SELECT COUNT(*) FROM accounts WHERE is_archived = 0 AND ' . visibilityScope('accounts'))->fetchColumn();
+// subscriptions has no owner_user_id of its own — scoped through the account
+// each one belongs to, same as the export/renewals queries.
+$paidAccountsCount = (int) $pdo->query("SELECT COUNT(*) FROM subscriptions sub
+    JOIN accounts a ON a.id = sub.account_id
+    WHERE sub.type = 'Paid' AND sub.status = 'Active' AND " . visibilityScope('accounts', 'a'))->fetchColumn();
 
 $hiddenPrivateCount = array_sum(array_map('hiddenPrivateRecordsCount', VISIBILITY_SCOPED_TABLES));
 
@@ -22,11 +30,11 @@ $needsAttentionItems = getNeedsAttentionItems($pdo);
 $needsAttentionSummary = needsAttentionSummary($needsAttentionItems);
 
 $emailTwofaRows = $pdo->query('SELECT es.twofa_status FROM emails e
-    LEFT JOIN email_security es ON es.email_id = e.id WHERE e.is_archived = 0')->fetchAll();
+    LEFT JOIN email_security es ON es.email_id = e.id WHERE e.is_archived = 0 AND ' . visibilityScope('emails', 'e'))->fetchAll();
 $emailTwofaTally = tallySecurityStates($emailTwofaRows, 'twofa_status');
 
 $accountTwofaRows = $pdo->query('SELECT acs.twofa_status FROM accounts a
-    LEFT JOIN account_security acs ON acs.account_id = a.id WHERE a.is_archived = 0')->fetchAll();
+    LEFT JOIN account_security acs ON acs.account_id = a.id WHERE a.is_archived = 0 AND ' . visibilityScope('accounts', 'a'))->fetchAll();
 $accountTwofaTally = tallySecurityStates($accountTwofaRows, 'twofa_status');
 
 $renewalsWidgetDays = 30;
@@ -39,7 +47,17 @@ foreach ($costs as $row) {
 }
 ksort($byCurrency);
 
-$recentHistory = $pdo->query('SELECT * FROM history ORDER BY created_at DESC, id DESC LIMIT 15')->fetchAll();
+// history is polymorphic (entity_type + entity_id can point at any of the
+// four scoped tables) so it can't take a single visibilityScope() call —
+// each branch is scoped against the specific table its entity_type names,
+// and the LIMIT applies AFTER that filtering so 15 rows always means 15
+// VISIBLE rows, not 15 raw rows some of which then get hidden.
+$recentHistory = $pdo->query("SELECT * FROM history h
+    WHERE (h.entity_type = 'email' AND EXISTS (SELECT 1 FROM emails e WHERE e.id = h.entity_id AND (" . visibilityScope('emails', 'e') . ")))
+       OR (h.entity_type = 'service' AND EXISTS (SELECT 1 FROM services s WHERE s.id = h.entity_id AND (" . visibilityScope('services', 's') . ")))
+       OR (h.entity_type = 'account' AND EXISTS (SELECT 1 FROM accounts a WHERE a.id = h.entity_id AND (" . visibilityScope('accounts', 'a') . ")))
+       OR (h.entity_type = 'phone' AND EXISTS (SELECT 1 FROM phones p WHERE p.id = h.entity_id AND (" . visibilityScope('phones', 'p') . ")))
+    ORDER BY h.created_at DESC, h.id DESC LIMIT 15")->fetchAll();
 
 $pageTitle = t('nav.dashboard');
 require __DIR__ . '/includes/header.php';

@@ -16,3 +16,6 @@ Thumbs.db
 
 # Local scratch files
 *.log
+
+# Release archives — built by tools/build-release.sh, never committed
+*.zip

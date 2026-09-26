@@ -27,6 +27,9 @@ $workspaces = $membershipStmt->fetchAll();
 if (count($workspaces) === 1) {
     $_SESSION['workspace_id'] = (int) $workspaces[0]['workspace_id'];
     $_SESSION['role'] = $workspaces[0]['role'];
+    if (isWorkspaceSuspended((int) $workspaces[0]['workspace_id'])) {
+        renderWorkspaceSuspendedPage((int) $workspaces[0]['workspace_id']);
+    }
     header('Location: ' . appUrl(safeInternalRedirect($redirect)));
     exit;
 }
@@ -53,6 +56,9 @@ if ($workspaces && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $_SESSION['workspace_id'] = (int) $chosen['workspace_id'];
             $_SESSION['role'] = $chosen['role'];
+            if (isWorkspaceSuspended((int) $chosen['workspace_id'])) {
+                renderWorkspaceSuspendedPage((int) $chosen['workspace_id']);
+            }
             header('Location: ' . appUrl(safeInternalRedirect($redirect)));
             exit;
         }

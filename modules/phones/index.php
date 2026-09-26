@@ -55,7 +55,9 @@ require __DIR__ . '/../../includes/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h1 class="h4 mb-0"><?= e(t('phones.title')) ?></h1>
-    <a href="add.php" class="btn btn-primary btn-sm"><?= e(t('phones.add')) ?></a>
+    <?php if (canWrite()): ?>
+        <a href="add.php" class="btn btn-primary btn-sm"><?= e(t('phones.add')) ?></a>
+    <?php endif; ?>
 </div>
 
 <form method="get" class="row g-2 mb-3">
@@ -79,7 +81,9 @@ require __DIR__ . '/../../includes/header.php';
     <div class="card am-card">
         <div class="card-body text-center py-5">
             <p class="text-muted mb-3"><?= e(t('phones.empty')) ?></p>
-            <a href="add.php" class="btn btn-primary"><?= e(t('phones.add_first')) ?></a>
+            <?php if (canWrite()): ?>
+                <a href="add.php" class="btn btn-primary"><?= e(t('phones.add_first')) ?></a>
+            <?php endif; ?>
         </div>
     </div>
 <?php elseif (!$phones): ?>

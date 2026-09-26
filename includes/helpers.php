@@ -3,6 +3,24 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/lang.php';
 
+/**
+ * The one function for any timestamp that is stored in or compared against
+ * a datetime('now') column. SQLite's datetime('now') is always UTC; PHP's
+ * date()/time() follow config.php's Asia/Tehran (UTC+3:30) local timezone.
+ * Mixing the two silently shifts every boundary by 3h30m (VERIFIED: a login
+ * lockout window and password-reset request cap that never triggered
+ * because "15 minutes ago" was computed hours in the future relative to the
+ * stored UTC rows). gmdate(), not date() — the point is to bypass the
+ * configured timezone, not reformat within it. Never use this for a
+ * date-only value the user typed (renewal dates, created_date) or for
+ * display — only for a timestamp headed into, or compared against, the
+ * database.
+ */
+function dbNow(string $modifier = 'now'): string
+{
+    return gmdate('Y-m-d H:i:s', strtotime($modifier));
+}
+
 const EMAIL_TYPES = [
     'Personal' => 'شخصی',
     'Work' => 'کاری',
@@ -318,38 +336,47 @@ function log_history(
 }
 
 /**
- * Records ACCESS, not change: who viewed or exported which record, and when
- * — the platform-level audit_log table, distinct from log_history() above.
- * `history` (workspace-scoped) says what data changed and to what; this
- * says who looked at or pulled data out, which `history` was never designed
- * to capture and a data-change log can't retroactively provide.
+ * Resolves a history.changed_by value to a display name — that column
+ * holds a PLATFORM accounts_users.id (see log_history() above and
+ * migrations/010_drop_history_users_fk.php), never a row in the
+ * workspace's own dead `users` table, so this looks it up in platformDb(),
+ * not $pdo. Returns null for a null id or one no longer in accounts_users
+ * (e.g. a deleted account), so a caller can fall back to a dash rather
+ * than showing nothing.
  *
- * Lives in platformDb(), not the workspace db(), because it spans every
- * workspace a user touches — $entityType/$entityId reference a row in
- * whichever workspace database was active at the time (recorded alongside
- * via currentWorkspaceId()), not a row in the central database itself, so
- * there's no (and can't be a) foreign key tying them together.
- *
- * Intended call sites are every view.php (action 'view') and every export
- * endpoint (action 'export') — not yet wired in anywhere, since those files
- * weren't in scope for this change.
- *
- * @param string $action e.g. 'view', 'export'
- * @param string|null $entityType e.g. 'email','service','account','phone' — null for an export not tied to one row
- * @param int|null $entityId null when not applicable (e.g. a bulk CSV export)
+ * No current history display (the dashboard's recent-activity widget, or
+ * any of the four modules/*\/view.php history sections) actually reads
+ * changed_by yet — they all show action/date/field/old/new only. This is
+ * here so whichever one adds a "changed by" line resolves it correctly
+ * from day one instead of reinventing a lookup against the wrong database.
  */
-function auditLog(string $action, ?string $entityType = null, ?int $entityId = null): void
+function resolveChangedByName(?int $userId): ?string
 {
-    $userId = currentUserId();
     if ($userId === null) {
-        return;
+        return null;
     }
 
-    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
-    platformDb()->prepare(
-        'INSERT INTO audit_log (user_id, workspace_id, action, entity_type, entity_id, ip) VALUES (?, ?, ?, ?, ?, ?)'
-    )->execute([$userId, currentWorkspaceId(), $action, $entityType, $entityId, $ip]);
+    static $cache = [];
+    if (array_key_exists($userId, $cache)) {
+        return $cache[$userId];
+    }
+
+    $stmt = platformDb()->prepare('SELECT full_name, email FROM accounts_users WHERE id = ? LIMIT 1');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+
+    return $cache[$userId] = $row ? (string) ($row['full_name'] ?: $row['email']) : null;
 }
+
+// auditLog() used to live here, recording access (who viewed/exported what,
+// and when) into the platform-level audit_log table. Merged into
+// logAuditEvent() (includes/audit.php) — that file's own, differently-
+// shaped function of the same purpose — into one function, since a table
+// having two divergent schema definitions across two migrations is exactly
+// what caused audit_log to be missing its `details` column in the first
+// place. Call logAuditEvent($action, $entityType, $entityId) for the old
+// auditLog() call shape; it defaults user_id/workspace_id from the current
+// session exactly as auditLog() did.
 
 const VISIBILITY_SCOPED_TABLES = ['emails', 'services', 'accounts', 'phones'];
 
@@ -358,41 +385,54 @@ const VISIBILITY_SCOPED_TABLES = ['emails', 'services', 'accounts', 'phones'];
  * fixed whitelist and the only other value embedded is the current session's
  * own int user id, so this is safe to concatenate directly into a query)
  * restricting rows to what the current user's role in the active workspace
- * is allowed to see:
+ * is allowed to see — the "see private record" row of the permission matrix
+ * in docs/PERMISSIONS.md (the source of truth for this and every other
+ * permission function on this page):
  *
- * - owner/admin: everything — no restriction.
- * - member/viewer, or no recognized role at all (fail closed rather than
- *   open): workspace-visible records, plus their own private ones.
+ * - owner: everything — no restriction.
+ * - admin/member/viewer, or no recognized role at all (fail closed rather
+ *   than open): workspace-visible records, plus their own private ones.
+ *   DECISION (docs/PERMISSIONS.md): admin does NOT see other users'
+ *   private records — only owner gets the unrestricted '1=1'.
  *
- * $table must be the table name (or the alias it's queried under) exactly as
- * it appears in the calling query's FROM/JOIN, since it's used to qualify
- * `visibility`/`owner_user_id` and avoid ambiguity in a joined query.
- *
- * Preparation only, per this task: nothing calls this from an actual query
- * yet — that's separate follow-up work.
+ * $table is always the real table name, validated against
+ * VISIBILITY_SCOPED_TABLES. When the calling query aliases that table
+ * (e.g. `FROM accounts a`), pass the alias separately as $alias — it's
+ * validated against a plain identifier pattern (never embedded unchecked)
+ * and used as the column prefix instead of $table, so the generated
+ * fragment qualifies `visibility`/`owner_user_id` against the name the
+ * query can actually resolve.
  */
-function visibilityScope(string $table): string
+function visibilityScope(string $table, ?string $alias = null): string
 {
     if (!in_array($table, VISIBILITY_SCOPED_TABLES, true)) {
         throw new InvalidArgumentException("visibilityScope(): unrecognized table \"{$table}\"");
     }
+    if ($alias !== null && !preg_match('/^[a-z_][a-z0-9_]{0,15}$/', $alias)) {
+        throw new InvalidArgumentException("visibilityScope(): invalid alias \"{$alias}\"");
+    }
 
     $role = currentRole();
-    if ($role === 'owner' || $role === 'admin') {
+    if ($role === 'owner') {
         return '1=1';
     }
 
+    $prefix = $alias ?? $table;
     $userId = (int) currentUserId();
-    return "({$table}.visibility = 'workspace' OR ({$table}.visibility = 'private' AND {$table}.owner_user_id = {$userId}))";
+    return "({$prefix}.visibility = 'workspace' OR ({$prefix}.visibility = 'private' AND {$prefix}.owner_user_id = {$userId}))";
 }
 
 /**
  * Count of records in $table that are 'private' and not owned by the
  * current user (including a private record with no recorded owner at
  * all) — i.e. exactly what visibilityScope() is hiding from them right
- * now. Always 0 for owner/admin, since nothing is hidden from them.
- * Deliberately returns a bare count only — callers must never surface
- * which records, who owns them, or any other detail alongside it.
+ * now. Always 0 for owner, since nothing is hidden from them. Non-zero for
+ * admin since the DECISION in docs/PERMISSIONS.md: admin does not
+ * automatically see other users' private records either, so the same
+ * "N private records hidden" notice member/viewer already got must keep
+ * showing for admin too. Deliberately returns a bare count only — callers
+ * must never surface which records, who owns them, or any other detail
+ * alongside it.
  */
 function hiddenPrivateRecordsCount(string $table): int
 {
@@ -401,7 +441,7 @@ function hiddenPrivateRecordsCount(string $table): int
     }
 
     $role = currentRole();
-    if ($role === 'owner' || $role === 'admin') {
+    if ($role === 'owner') {
         return 0;
     }
 
@@ -438,17 +478,65 @@ function notFoundResponse(string $message): void
  * rather than filtered in SQL. View/edit pages combine this with a
  * not-found check into one notFoundResponse() so "exists but hidden" and
  * "doesn't exist" are indistinguishable to the caller.
+ *
+ * "see private record" row of docs/PERMISSIONS.md — the source of truth.
+ * DECISION: admin does NOT get an automatic true here (only owner does);
+ * an admin still sees their OWN private record via the ownership check
+ * below, same as a member.
  */
 function canSeeRecord(?string $visibility, ?int $ownerUserId): bool
 {
     $role = currentRole();
-    if ($role === 'owner' || $role === 'admin') {
+    if ($role === 'owner') {
         return true;
     }
     if ($visibility === 'workspace') {
         return true;
     }
     return $ownerUserId !== null && $ownerUserId === currentUserId();
+}
+
+/**
+ * "edit/delete/archive record" row of the permission matrix in
+ * docs/PERMISSIONS.md (the source of truth): owner and admin may write to
+ * any record in the workspace; a member only to a record they own; a
+ * viewer never. Visibility is deliberately NOT a factor here — unlike
+ * canSeeRecord(), a workspace-visible record a member doesn't own is still
+ * off-limits to write, matching the matrix exactly — but the parameter is
+ * kept so every call site can pass the same $row shape it already has for
+ * canSeeRecord()/canManageRecordVisibility() without branching.
+ */
+function canEditRecord(?string $visibility, ?int $ownerUserId): bool
+{
+    $role = currentRole();
+    if ($role === 'owner' || $role === 'admin') {
+        return true;
+    }
+    if ($role === 'member') {
+        return $ownerUserId !== null && $ownerUserId === currentUserId();
+    }
+    return false;
+}
+
+/**
+ * Gate for write endpoints (edit/delete/archive) on a single already-
+ * fetched record — pairs with notFoundResponse() the same way
+ * canSeeRecord() does for reads: check existence/visibility first (a
+ * hidden-or-missing record is a 404, per notFoundResponse()'s own
+ * docblock), THEN call this to gate the write itself. $row is whatever
+ * associative array the caller already fetched (edit.php's SELECT *,
+ * etc.) — only 'visibility' and 'owner_user_id' are read from it. Renders
+ * a 403 (not a redirect, not a 404) via the same rendering requireRole()
+ * uses, since the record's existence and this user's read access are
+ * already established by this point — only the write is being refused.
+ * See docs/PERMISSIONS.md.
+ */
+function requireEditRecord(array $row): void
+{
+    $ownerUserId = isset($row['owner_user_id']) ? (int) $row['owner_user_id'] : null;
+    if (!canEditRecord($row['visibility'] ?? null, $ownerUserId)) {
+        forbiddenResponse();
+    }
 }
 
 /**

@@ -1,0 +1,50 @@
+name: Build release zip
+
+# Builds a distributable zip with tools/build-release.sh whenever a version
+# tag is pushed, and attaches it to the matching GitHub release. See the
+# README note in the PR/commit that added this file for whether it's
+# actually worth keeping enabled versus just running the script locally.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tools/build-release.sh reads config.php via `git show <ref>:config.php`, which needs the actual commit, not a shallow/blobless clone
+
+      - name: Detect which edition this tag belongs to
+        id: edition
+        run: |
+          if git merge-base --is-ancestor "${{ github.sha }}" origin/single-user 2>/dev/null; then
+            echo "name=single-user" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=saas" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the release zip
+        run: |
+          chmod +x tools/build-release.sh
+          tools/build-release.sh "${{ github.sha }}" "${{ steps.edition.outputs.name }}"
+
+      - name: Verify no database file made it into the archive
+        run: |
+          ZIP_FILE="$(ls accountmanager-*.zip)"
+          if unzip -l "$ZIP_FILE" | grep -qiE '\.sqlite|\.bak'; then
+            echo "::error::A database or backup file was found in $ZIP_FILE — refusing to publish it."
+            exit 1
+          fi
+
+      - name: Attach the zip to the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: accountmanager-*.zip

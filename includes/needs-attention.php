@@ -171,44 +171,91 @@ function evaluateEmailIssues(array $email, ?array $security, int $completeness):
  * Flat, sorted (Critical first) list of every open item across Emails and
  * Accounts. Closed/Abandoned/Archived entities are excluded entirely — spec
  * sec. 36 explicitly forbids flagging them as active problems without reason.
+ *
+ * MEASURED: with 3,000 accounts the old per-account loop (fetchAccountById()
+ * + fetchAccountSecurity()/fetchAccountRecovery()/fetchSubscription(), one
+ * query each) ran ~5 queries per account — ~15,000 round trips total. Every
+ * eligible account (and separately, every eligible email) is now read in ONE
+ * query each, and account_security/account_recovery/subscriptions (email_security
+ * for emails) are each read in one further query scoped with
+ * `account_id IN (<the same eligibility subquery>)` — a subquery rather than
+ * a literal bound-parameter list, since a literal list would need one
+ * placeholder per account and risk SQLite's default bound-parameter ceiling
+ * at this scale. Six queries total, however many thousand accounts/emails
+ * exist, replacing the previous per-row multiplication. The full set is
+ * still evaluated here (not just one page's worth) because the correct
+ * global severity counts and sort order — what needs-attention.php's
+ * pagination and top summary both depend on — can't be known without it;
+ * this only removes the redundant per-row DB round trips, not the
+ * evaluation itself.
  */
 function getNeedsAttentionItems(PDO $pdo): array
 {
     $items = [];
 
-    $accountIds = $pdo->query("SELECT id FROM accounts WHERE is_archived = 0 AND status NOT IN ('Closed', 'Abandoned')")->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($accountIds as $accountId) {
-        $account = fetchAccountById($pdo, (int) $accountId);
-        if (!$account) {
-            continue;
-        }
-        $security = fetchAccountSecurity($pdo, (int) $accountId);
-        $recovery = fetchAccountRecovery($pdo, (int) $accountId);
-        $subscription = fetchSubscription($pdo, (int) $accountId);
+    $accountsEligibleSql = "SELECT a.id FROM accounts a
+        WHERE a.is_archived = 0 AND a.status NOT IN ('Closed', 'Abandoned') AND " . visibilityScope('accounts', 'a');
+
+    $accounts = $pdo->query("SELECT a.*, s.service_name, e.email_address, p.phone_number
+        FROM accounts a
+        JOIN services s ON s.id = a.service_id
+        LEFT JOIN emails e ON e.id = a.email_id
+        LEFT JOIN phones p ON p.id = a.identity_phone_id
+        WHERE a.is_archived = 0 AND a.status NOT IN ('Closed', 'Abandoned') AND " . visibilityScope('accounts', 'a'))->fetchAll();
+
+    $securityByAccount = array_column(
+        $pdo->query("SELECT * FROM account_security WHERE account_id IN ({$accountsEligibleSql})")->fetchAll(),
+        null,
+        'account_id'
+    );
+    $recoveryByAccount = array_column(
+        $pdo->query("SELECT * FROM account_recovery WHERE account_id IN ({$accountsEligibleSql})")->fetchAll(),
+        null,
+        'account_id'
+    );
+    $subscriptionByAccount = array_column(
+        $pdo->query("SELECT * FROM subscriptions WHERE account_id IN ({$accountsEligibleSql})")->fetchAll(),
+        null,
+        'account_id'
+    );
+
+    foreach ($accounts as $account) {
+        $accountId = (int) $account['id'];
+        $security = $securityByAccount[$accountId] ?? null;
+        $recovery = $recoveryByAccount[$accountId] ?? null;
+        $subscription = $subscriptionByAccount[$accountId] ?? null;
         $completeness = calcAccountCompleteness($account, $security, $recovery);
         $title = $account['service_name'] . ' — ' . accountDisplayIdentity($account);
         foreach (evaluateAccountIssues($account, $security, $recovery, $subscription, $completeness) as $issue) {
             $items[] = $issue + [
                 'entity_type' => 'account',
-                'entity_id' => (int) $accountId,
+                'entity_id' => $accountId,
                 'title' => $title,
                 'url' => 'modules/accounts/view.php?id=' . $accountId,
             ];
         }
     }
 
-    $emailIds = $pdo->query("SELECT id FROM emails WHERE is_archived = 0 AND status NOT IN ('Disabled', 'Abandoned')")->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($emailIds as $emailId) {
-        $email = fetchEmailById($pdo, (int) $emailId);
-        if (!$email) {
-            continue;
-        }
-        $security = fetchEmailSecurity($pdo, (int) $emailId);
+    $emailsEligibleSql = "SELECT id FROM emails
+        WHERE is_archived = 0 AND status NOT IN ('Disabled', 'Abandoned') AND " . visibilityScope('emails');
+
+    $emails = $pdo->query("SELECT * FROM emails
+        WHERE is_archived = 0 AND status NOT IN ('Disabled', 'Abandoned') AND " . visibilityScope('emails'))->fetchAll();
+
+    $securityByEmail = array_column(
+        $pdo->query("SELECT * FROM email_security WHERE email_id IN ({$emailsEligibleSql})")->fetchAll(),
+        null,
+        'email_id'
+    );
+
+    foreach ($emails as $email) {
+        $emailId = (int) $email['id'];
+        $security = $securityByEmail[$emailId] ?? null;
         $completeness = calcEmailCompleteness($email, $security);
         foreach (evaluateEmailIssues($email, $security, $completeness) as $issue) {
             $items[] = $issue + [
                 'entity_type' => 'email',
-                'entity_id' => (int) $emailId,
+                'entity_id' => $emailId,
                 'title' => $email['email_address'],
                 'url' => 'modules/emails/view.php?id=' . $emailId,
             ];

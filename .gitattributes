@@ -1,0 +1,35 @@
+# Normalize everything to LF in the repository; Git still converts to the
+# platform's native line ending in the working tree via `text=auto`. This
+# is what the renormalization commands below actually fix.
+* text=auto eol=lf
+
+# Binary assets — never text-converted, never diffed line-by-line.
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.sqlite binary
+
+# --- git archive exclusions (tools/build-release.sh, release CI) ---
+# Development tooling and internal/source-only docs never belong in a
+# distributable zip. See docs/BRANCHING.md. This lets git archive itself
+# enforce the exclusion list, rather than tools/build-release.sh manually
+# re-implementing it after the fact.
+tools/ export-ignore
+.github/ export-ignore
+.claude/ export-ignore
+.gitattributes export-ignore
+
+docs/masster.md export-ignore
+docs/DEVELOPMENT.md export-ignore
+docs/DEVELOPMENT.fa.md export-ignore
+docs/I18N.md export-ignore
+docs/I18N.fa.md export-ignore
+docs/IDENTITY-MODEL.md export-ignore
+docs/IDENTITY-MODEL.fa.md export-ignore
+docs/ROADMAP-SAAS.md export-ignore
+docs/ROADMAP-SAAS.fa.md export-ignore
+docs/BRANCHING.md export-ignore
+docs/BRANCHING.fa.md export-ignore

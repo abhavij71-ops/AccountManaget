@@ -5,8 +5,10 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/security-score.php';
 require_once __DIR__ . '/../../includes/needs-attention.php';
+require_once __DIR__ . '/../../includes/audit.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $entity = (string) ($_GET['entity'] ?? '');
@@ -35,6 +37,20 @@ $identityOf = static function (array $r): string {
     };
 };
 
+/**
+ * CSV formula-injection guard (VERIFIED: notes/names/usernames are
+ * user-controlled and written unescaped; a cell starting with = + - @ tab
+ * or CR is executed as a formula the moment Excel opens the file). A
+ * leading single quote is Excel/Sheets' own long-standing "force text"
+ * marker — it forces the cell to display as literal text instead of being
+ * parsed as a formula, without altering the value itself when read back
+ * programmatically (e.g. re-importing this same export).
+ */
+function csvSafe(string $v): string
+{
+    return $v !== '' && preg_match('/^[=+\-@\t\r]/', $v) === 1 ? "'" . $v : $v;
+}
+
 $filename = 'account-manager-' . $entity . '-' . date('Y-m-d') . '.csv';
 
 header('Content-Type: text/csv; charset=UTF-8');
@@ -47,19 +63,29 @@ $out = fopen('php://output', 'w');
 // without it, Persian/Arabic text is mangled (mojibake) when the file is opened.
 fwrite($out, "\xEF\xBB\xBF");
 
+// Every cell (header and data rows alike) is passed through csvSafe()
+// before ever reaching fputcsv() — cheaper and safer than trying to
+// classify which specific columns are "user-controlled" per entity.
+$writeRow = static function (array $row) use ($out): void {
+    fputcsv($out, array_map(static fn ($v) => csvSafe((string) ($v ?? '')), $row));
+};
+
+$exportedCount = 0;
+
 switch ($entity) {
     case 'emails':
         $rows = $pdo->query('SELECT email_address, display_name, provider, type, purpose, status,
                 created_date, last_verified, is_archived, notes
-            FROM emails ORDER BY email_address')->fetchAll();
+            FROM emails WHERE ' . visibilityScope('emails') . ' ORDER BY email_address')->fetchAll();
+        $exportedCount = count($rows);
 
-        fputcsv($out, [
+        $writeRow([
             t('emails.th_address'), t('common.field_display_name'), t('emails.field_provider'), t('common.field_type'),
             t('emails.field_purpose'), t('common.field_status'), t('common.field_created_date'), t('common.field_last_verified'),
             t('accounts.archived_badge'), t('common.field_notes'),
         ]);
         foreach ($rows as $r) {
-            fputcsv($out, [
+            $writeRow([
                 $r['email_address'], $r['display_name'], $r['provider'], enumLabel($r['type'], EMAIL_TYPES),
                 $r['purpose'], enumLabel($r['status'], EMAIL_STATUSES), $r['created_date'], $r['last_verified'],
                 $yesNo((int) $r['is_archived']), $r['notes'],
@@ -69,14 +95,15 @@ switch ($entity) {
 
     case 'services':
         $rows = $pdo->query('SELECT service_name, website, login_url, category, status, purpose, is_archived, notes
-            FROM services ORDER BY service_name')->fetchAll();
+            FROM services WHERE ' . visibilityScope('services') . ' ORDER BY service_name')->fetchAll();
+        $exportedCount = count($rows);
 
-        fputcsv($out, [
+        $writeRow([
             t('services.th_name'), t('services.field_website'), t('services.field_login_url'), t('services.th_category'),
             t('common.field_status'), t('services.field_purpose'), t('accounts.archived_badge'), t('common.field_notes'),
         ]);
         foreach ($rows as $r) {
-            fputcsv($out, [
+            $writeRow([
                 $r['service_name'], $r['website'], $r['login_url'], $r['category'],
                 enumLabel($r['status'], SERVICE_STATUSES), $r['purpose'], $yesNo((int) $r['is_archived']), $r['notes'],
             ]);
@@ -85,14 +112,15 @@ switch ($entity) {
 
     case 'phones':
         $rows = $pdo->query('SELECT phone_number, country, label, status, is_primary, is_archived, notes
-            FROM phones ORDER BY phone_number')->fetchAll();
+            FROM phones WHERE ' . visibilityScope('phones') . ' ORDER BY phone_number')->fetchAll();
+        $exportedCount = count($rows);
 
-        fputcsv($out, [
+        $writeRow([
             t('phones.th_number'), t('phones.field_country'), t('phones.field_label'), t('common.field_status'),
             t('phones.field_is_primary'), t('accounts.archived_badge'), t('common.field_notes'),
         ]);
         foreach ($rows as $r) {
-            fputcsv($out, [
+            $writeRow([
                 $r['phone_number'], $r['country'], $r['label'], enumLabel($r['status'], PHONE_STATUSES),
                 $yesNo((int) $r['is_primary']), $yesNo((int) $r['is_archived']), $r['notes'],
             ]);
@@ -107,9 +135,11 @@ switch ($entity) {
             JOIN services s ON s.id = a.service_id
             LEFT JOIN emails e ON e.id = a.email_id
             LEFT JOIN phones p ON p.id = a.identity_phone_id
+            WHERE " . visibilityScope('accounts', 'a') . "
             ORDER BY s.service_name")->fetchAll();
+        $exportedCount = count($rows);
 
-        fputcsv($out, [
+        $writeRow([
             t('accounts.th_service'), t('export.col_identity_type'), t('accounts.th_identity'), t('accounts.th_username'),
             t('common.field_display_name'), t('accounts.field_external_id'), t('accounts.field_account_url'), t('services.field_login_url'),
             t('common.field_status'), t('accounts.field_type_plain'), t('common.field_created_date'), t('accounts.field_last_login'),
@@ -122,7 +152,7 @@ switch ($entity) {
                 'other' => t('accounts.identity_type_other'),
                 default => t('accounts.identity_type_email'),
             };
-            fputcsv($out, [
+            $writeRow([
                 $r['service_name'], $identityTypeLabel, $identityOf($r), $r['username'],
                 $r['display_name'], $r['external_account_id'], $r['account_url'], $r['login_url'],
                 enumLabel($r['status'], ACCOUNT_STATUSES), enumLabel($r['account_type'], ACCOUNT_TYPES),
@@ -133,6 +163,9 @@ switch ($entity) {
         break;
 
     case 'subscriptions':
+        // subscriptions/payments have no owner_user_id of their own — scoped
+        // via the accounts row each one belongs to (join through accounts,
+        // scope on accounts, per the task).
         $rows = $pdo->query('SELECT s.service_name, a.identity_type, a.username, e.email_address, p.phone_number,
                 sub.plan, sub.type AS sub_type, sub.status AS sub_status, sub.price, sub.currency, sub.billing_cycle,
                 sub.start_date, sub.renewal_date, sub.auto_renewal,
@@ -144,9 +177,11 @@ switch ($entity) {
             LEFT JOIN phones p ON p.id = a.identity_phone_id
             LEFT JOIN subscriptions sub ON sub.account_id = a.id
             LEFT JOIN payments pay ON pay.account_id = a.id
+            WHERE ' . visibilityScope('accounts', 'a') . '
             ORDER BY s.service_name')->fetchAll();
+        $exportedCount = count($rows);
 
-        fputcsv($out, [
+        $writeRow([
             t('accounts.th_service'), t('accounts.th_identity'), t('accounts.th_plan'), t('common.field_type'), t('common.field_status'),
             t('accounts.field_price'), t('accounts.field_currency'), t('accounts.th_billing_cycle'), t('accounts.field_start_date'),
             t('accounts.field_renewal_date'), t('accounts.field_auto_renewal'), t('accounts.field_payment_required'),
@@ -158,7 +193,7 @@ switch ($entity) {
             // the same way the account profile UI does, rather than exporting them bare.
             $last4Masked = !empty($r['last4']) ? '•••• ' . $r['last4'] : '';
 
-            fputcsv($out, [
+            $writeRow([
                 $r['service_name'], $identityOf($r), $r['plan'],
                 $r['sub_type'] !== null ? enumLabel($r['sub_type'], SUBSCRIPTION_TYPES) : '',
                 $r['sub_status'] !== null ? enumLabel($r['sub_status'], SUBSCRIPTION_STATUSES) : '',
@@ -178,18 +213,19 @@ switch ($entity) {
         // separated by a blank line — email security scores, account 2FA status, and the
         // Needs Attention issue list, mirroring the underlying security-score.php /
         // needs-attention.php logic rather than duplicating it.
-        fputcsv($out, ['Email Security']);
-        fputcsv($out, [
+        $writeRow(['Email Security']);
+        $writeRow([
             t('emails.th_address'), t('field.twofa'), t('field.passkey'), t('emails.view_security_key'),
             t('field.security_questions'), t('field.recovery_codes_status'), t('field.last_security_check'), t('common.security_score'),
         ]);
         $emailRows = $pdo->query('SELECT e.email_address, es.twofa_status, es.passkey_status, es.security_key_status,
                 es.security_questions_status, es.recovery_codes_status, es.backup_method, es.last_security_check
             FROM emails e LEFT JOIN email_security es ON es.email_id = e.id
+            WHERE ' . visibilityScope('emails', 'e') . '
             ORDER BY e.email_address')->fetchAll();
         foreach ($emailRows as $r) {
             $score = calcEmailSecurityScore($r['twofa_status'] !== null ? $r : null);
-            fputcsv($out, [
+            $writeRow([
                 $r['email_address'],
                 enumLabel($r['twofa_status'] ?? 'Not Set', SECURITY_STATES),
                 enumLabel($r['passkey_status'] ?? 'Not Set', SECURITY_STATES),
@@ -201,33 +237,39 @@ switch ($entity) {
             ]);
         }
 
-        fputcsv($out, []);
-        fputcsv($out, ['Account 2FA Status']);
-        fputcsv($out, [t('accounts.th_service'), t('accounts.th_identity'), t('field.twofa')]);
+        $writeRow([]);
+        $writeRow(['Account 2FA Status']);
+        $writeRow([t('accounts.th_service'), t('accounts.th_identity'), t('field.twofa')]);
         $accountRows = $pdo->query("SELECT s.service_name, a.identity_type, a.username, e.email_address, p.phone_number, acs.twofa_status
             FROM accounts a
             JOIN services s ON s.id = a.service_id
             LEFT JOIN emails e ON e.id = a.email_id
             LEFT JOIN phones p ON p.id = a.identity_phone_id
             LEFT JOIN account_security acs ON acs.account_id = a.id
+            WHERE " . visibilityScope('accounts', 'a') . "
             ORDER BY s.service_name")->fetchAll();
         foreach ($accountRows as $r) {
-            fputcsv($out, [$r['service_name'], $identityOf($r), enumLabel($r['twofa_status'] ?? 'Not Set', SECURITY_STATES)]);
+            $writeRow([$r['service_name'], $identityOf($r), enumLabel($r['twofa_status'] ?? 'Not Set', SECURITY_STATES)]);
         }
 
-        fputcsv($out, []);
-        fputcsv($out, ['Needs Attention']);
-        fputcsv($out, ['Level', t('common.field_type'), 'Title', 'Issue']);
-        foreach (getNeedsAttentionItems($pdo) as $item) {
-            fputcsv($out, [
+        $writeRow([]);
+        $writeRow(['Needs Attention']);
+        $writeRow(['Level', t('common.field_type'), 'Title', 'Issue']);
+        $needsAttentionItems = getNeedsAttentionItems($pdo);
+        foreach ($needsAttentionItems as $item) {
+            $writeRow([
                 needsAttentionLevelLabel($item['level']),
                 $item['entity_type'] === 'account' ? t('nav.accounts') : t('nav.emails'),
                 $item['title'],
                 $item['message'],
             ]);
         }
+
+        $exportedCount = count($emailRows) + count($accountRows) + count($needsAttentionItems);
         break;
 }
+
+logAuditEvent('export', null, null, ['entity' => $entity, 'count' => $exportedCount]);
 
 fclose($out);
 exit;

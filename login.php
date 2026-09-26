@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/lang.php';
+require_once __DIR__ . '/includes/audit.php';
 
 if (isLoggedIn()) {
     header('Location: ' . appUrl('index.php'));
@@ -29,6 +30,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Deliberately generic: never reveals whether it's this IP or this
         // username that's over the attempt limit.
         $error = tOr('login.locked_out', 'Too many failed attempts. Please try again in a few minutes.');
+        // Logged only when the email resolves to a real account — logAuditEvent()
+        // can't attribute a row to nobody, and an unknown email is already
+        // captured in login_attempts regardless.
+        $lockedUserStmt = platformDb()->prepare('SELECT id FROM accounts_users WHERE email = ? LIMIT 1');
+        $lockedUserStmt->execute([$email]);
+        $lockedUserId = $lockedUserStmt->fetchColumn();
+        if ($lockedUserId !== false) {
+            logAuditEvent('login.lockout', 'user', (int) $lockedUserId, ['email' => $email], userId: (int) $lockedUserId);
+        }
     } else {
         $stmt = platformDb()->prepare('SELECT id, email, password_hash, is_active, totp_enabled_at FROM accounts_users WHERE email = ? LIMIT 1');
         $stmt->execute([$email]);
@@ -36,9 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
             recordLoginAttempt($ip, $email, false);
+            // Only when $user actually resolved — an unknown email has no
+            // accounts_users id to attribute the row to at all.
+            if ($user) {
+                logAuditEvent('login.failure', 'user', (int) $user['id'], ['email' => $email, 'reason' => 'invalid_credentials'], userId: (int) $user['id']);
+            }
             $error = t('login.invalid_credentials');
         } elseif ((int) $user['is_active'] !== 1) {
             recordLoginAttempt($ip, $email, false);
+            logAuditEvent('login.failure', 'user', (int) $user['id'], ['email' => $email, 'reason' => 'account_disabled'], userId: (int) $user['id']);
             $error = t('login.account_disabled');
         } else {
             $membershipStmt = platformDb()->prepare(
@@ -56,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // access" string — from the user's side, an account with
                 // nothing to open behaves the same as one that isn't usable.
                 recordLoginAttempt($ip, $email, false);
+                logAuditEvent('login.failure', 'user', (int) $user['id'], ['email' => $email, 'reason' => 'no_workspace_access'], userId: (int) $user['id']);
                 $error = t('login.account_disabled');
             } else {
                 // The password factor succeeded — recorded as such regardless
@@ -63,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // is tracked separately by verify-totp.php, against the same
                 // login_attempts table.
                 recordLoginAttempt($ip, $email, true);
+                logAuditEvent('login.success', 'user', (int) $user['id'], ['email' => $email], userId: (int) $user['id']);
 
                 if (!empty($user['totp_enabled_at'])) {
                     session_regenerate_id(true);
@@ -129,6 +147,13 @@ $bs = currentTextDirection() === 'rtl' ? 'bootstrap.rtl.min.css' : 'bootstrap.mi
 
                 <button type="submit" class="btn btn-primary w-100"><?= e(t('login.submit_button')) ?></button>
             </form>
+
+            <p class="text-center text-muted small mt-3 mb-1">
+                <a href="<?= e(appUrl('forgot-password.php')) ?>"><?= e(t('login.forgot_password_link')) ?></a>
+            </p>
+            <p class="text-center text-muted small mb-0">
+                <a href="<?= e(appUrl('register.php')) ?>"><?= e(t('login.create_account_link')) ?></a>
+            </p>
         </div>
     </div>
 </body>

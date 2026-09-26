@@ -30,7 +30,7 @@ if (!array_key_exists($sort, $sortable)) {
 }
 $dir = (strtolower((string) ($_GET['dir'] ?? 'asc')) === 'desc') ? 'DESC' : 'ASC';
 
-$where = [visibilityScope('a')];
+$where = [visibilityScope('accounts', 'a')];
 $params = [];
 
 if (!$showArchived) {
@@ -109,8 +109,10 @@ require __DIR__ . '/../../includes/header.php';
     <div class="d-flex gap-2">
         <a href="costs.php" class="btn btn-outline-secondary btn-sm"><?= e(t('accounts.costs')) ?></a>
         <a href="bulk-assign.php" class="btn btn-outline-primary btn-sm"><?= e(t('accounts.bulk_assign')) ?></a>
-        <a href="quick-add.php" class="btn btn-primary btn-sm"><?= e(t('accounts.quick_add')) ?></a>
-        <a href="add.php" class="btn btn-outline-primary btn-sm"><?= e(t('accounts.full_form')) ?></a>
+        <?php if (canWrite()): ?>
+            <a href="quick-add.php" class="btn btn-primary btn-sm"><?= e(t('accounts.quick_add')) ?></a>
+            <a href="add.php" class="btn btn-outline-primary btn-sm"><?= e(t('accounts.full_form')) ?></a>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -168,7 +170,9 @@ require __DIR__ . '/../../includes/header.php';
     <div class="card am-card">
         <div class="card-body text-center py-5">
             <p class="text-muted mb-3"><?= e(t('accounts.empty')) ?></p>
-            <a href="quick-add.php" class="btn btn-primary"><?= e(t('accounts.add_first')) ?></a>
+            <?php if (canWrite()): ?>
+                <a href="quick-add.php" class="btn btn-primary"><?= e(t('accounts.add_first')) ?></a>
+            <?php endif; ?>
         </div>
     </div>
 <?php elseif (!$accounts): ?>

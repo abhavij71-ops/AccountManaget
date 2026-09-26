@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/lang.php';
 require_once __DIR__ . '/includes/migrator.php';
+require_once __DIR__ . '/includes/workspaces.php';
 
 function db(): PDO
 {
@@ -18,8 +19,17 @@ function db(): PDO
         exit;
     }
     $workspaceId = (int) $_SESSION['workspace_id'];
-    $workspaceDir = DATA_DIR . '/workspaces';
-    $workspacePath = $workspaceDir . '/ws_' . str_pad((string) $workspaceId, 6, '0', STR_PAD_LEFT) . '.sqlite';
+
+    // Refuses a suspended workspace before its own SQLite file is even
+    // touched — billing.php is the sole exception, and only because it
+    // never calls db() in the first place (see renderWorkspaceSuspendedPage()'s
+    // own docblock, includes/workspaces.php).
+    if (isWorkspaceSuspended($workspaceId)) {
+        renderWorkspaceSuspendedPage($workspaceId);
+    }
+
+    $workspacePath = workspaceDatabasePath($workspaceId);
+    $workspaceDir = dirname($workspacePath);
 
     if (!is_dir($workspaceDir)) {
         mkdir($workspaceDir, 0755, true);
@@ -35,6 +45,7 @@ function db(): PDO
         $pdo->exec('PRAGMA busy_timeout = 5000');
         $duringMigration = true;
         runMigrations($pdo);
+        backfillOwnerUserId($pdo, $workspaceId);
     } catch (Throwable $e) {
         // Throwable, not PDOException: a migration can throw a non-PDO error too
         // (runMigrations() deliberately rethrows via `catch (Throwable $e) { ... throw

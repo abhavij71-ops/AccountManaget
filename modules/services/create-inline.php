@@ -8,6 +8,12 @@ requireLogin();
 
 header('Content-Type: application/json; charset=UTF-8');
 
+if (!canWrite()) {
+    http_response_code(403);
+    echo json_encode(['error' => 'شما دسترسی لازم برای مشاهده این صفحه را ندارید.']);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => t('msg.invalid_request')]);
@@ -31,8 +37,8 @@ if ($serviceName === '') {
 $pdo = db();
 
 try {
-    $stmt = $pdo->prepare('INSERT INTO services (service_name) VALUES (?)');
-    $stmt->execute([$serviceName]);
+    $stmt = $pdo->prepare('INSERT INTO services (service_name, owner_user_id) VALUES (?, ?)');
+    $stmt->execute([$serviceName, currentUserId()]);
     $newId = (int) $pdo->lastInsertId();
     log_history($pdo, 'service', $newId, 'Service Created');
 

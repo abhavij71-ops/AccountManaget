@@ -4,13 +4,16 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
+require_once __DIR__ . '/../../includes/plans.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
+$planLimitReached = false;
 
-$services = $pdo->query('SELECT id, service_name FROM services ORDER BY service_name')->fetchAll();
-$emails = $pdo->query('SELECT id, email_address FROM emails ORDER BY email_address')->fetchAll();
+$services = $pdo->query('SELECT id, service_name, visibility, owner_user_id FROM services ORDER BY service_name')->fetchAll();
+$emails = $pdo->query('SELECT id, email_address, visibility, owner_user_id FROM emails ORDER BY email_address')->fetchAll();
 
 $errors = [];
 $form = [
@@ -51,19 +54,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = t('accounts.bulk_type_invalid');
     }
 
+    // Whole-batch check up front — every combo requested (service_ids ×
+    // email_ids) is the worst case that could be created, checked once
+    // before anything is written, not row by row inside the loop below.
     if (!$errors) {
+        try {
+            assertCanAddAccounts(count($form['service_ids']) * count($form['email_ids']));
+        } catch (PlanLimitException $e) {
+            $planLimitReached = true;
+        }
+    }
+
+    if (!$errors && !$planLimitReached) {
         try {
             $pdo->beginTransaction();
 
             $checkStmt = $pdo->prepare('SELECT id FROM accounts WHERE service_id = ? AND email_id = ? LIMIT 1');
-            $insertStmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, username, status, account_type)
-                VALUES (:service_id, :email_id, :username, :status, :account_type)');
+            $insertStmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, username, status, account_type, owner_user_id)
+                VALUES (:service_id, :email_id, :username, :status, :account_type, :owner_user_id)');
+
+            $servicesById = array_column($services, null, 'id');
+            $emailsById = array_column($emails, null, 'id');
+            $recordIsEditable = static function (array $row): bool {
+                return canEditRecord($row['visibility'], $row['owner_user_id'] !== null ? (int) $row['owner_user_id'] : null);
+            };
 
             $created = 0;
             $skipped = 0;
+            $permissionSkipped = 0;
+            $ownerUserId = currentUserId();
 
             foreach ($form['service_ids'] as $serviceId) {
+                $service = $servicesById[$serviceId] ?? null;
+
                 foreach ($form['email_ids'] as $emailId) {
+                    $email = $emailsById[$emailId] ?? null;
+
+                    // Bulk operations: a member may only act on rows they can
+                    // edit (docs/PERMISSIONS.md) — silently skip any
+                    // service/email pairing where either side isn't theirs to
+                    // edit, rather than erroring or partially applying it.
+                    if (($service !== null && !$recordIsEditable($service)) || ($email !== null && !$recordIsEditable($email))) {
+                        $permissionSkipped++;
+                        continue;
+                    }
+
                     $checkStmt->execute([$serviceId, $emailId]);
                     if ($checkStmt->fetchColumn()) {
                         $skipped++;
@@ -76,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'username' => $form['username'] !== '' ? $form['username'] : null,
                         'status' => $form['status'],
                         'account_type' => $form['account_type'],
+                        'owner_user_id' => $ownerUserId,
                     ]);
                     $accountId = (int) $pdo->lastInsertId();
                     log_history($pdo, 'account', $accountId, 'Account Created');
@@ -88,6 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = t('accounts.bulk_created_message', ['count' => $created]);
             if ($skipped > 0) {
                 $message .= ' ' . t('accounts.bulk_skipped_message', ['count' => $skipped]);
+            }
+            if ($permissionSkipped > 0) {
+                $message .= ' ' . t('accounts.bulk_permission_skipped_message', ['count' => $permissionSkipped]);
             }
             flashSet($created > 0 ? 'success' : 'warning', $message);
             header('Location: index.php');
@@ -115,6 +154,13 @@ require __DIR__ . '/../../includes/header.php';
         <ul class="mb-0">
             <?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?>
         </ul>
+    </div>
+<?php endif; ?>
+
+<?php if ($planLimitReached): ?>
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><?= e(t('plans.limit_accounts_reached')) ?></span>
+        <a href="<?= e(appUrl('plans.php')) ?>" class="btn btn-sm btn-primary"><?= e(t('plans.upgrade_button')) ?></a>
     </div>
 <?php endif; ?>
 

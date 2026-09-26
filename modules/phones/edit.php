@@ -16,6 +16,7 @@ $phone = $stmt->fetch();
 if (!$phone || !canSeeRecord($phone['visibility'] ?? null, isset($phone['owner_user_id']) ? (int) $phone['owner_user_id'] : null)) {
     notFoundResponse(t('phones.not_found'));
 }
+requireEditRecord($phone);
 
 $ownerUserId = isset($phone['owner_user_id']) && $phone['owner_user_id'] !== null ? (int) $phone['owner_user_id'] : null;
 $canManageVisibility = canManageRecordVisibility($ownerUserId);

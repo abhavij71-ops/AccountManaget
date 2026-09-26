@@ -6,6 +6,7 @@ require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/platform-db.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/totp.php';
+require_once __DIR__ . '/login-lockout.php';
 
 function isLoggedIn(): bool
 {
@@ -204,8 +205,49 @@ function requireRole(string ...$roles): void
     }
 
     if ($roles !== [] && !in_array($role, $roles, true)) {
-        http_response_code(403);
-        die('شما دسترسی لازم برای مشاهده این صفحه را ندارید.');
+        forbiddenResponse();
+    }
+}
+
+/**
+ * Renders a real HTTP 403 exactly the way requireRole() always has —
+ * pulled out into its own function so requireWriteAccess() and
+ * requireEditRecord() (includes/helpers.php) reuse the identical response
+ * instead of duplicating these two lines a third and fourth time.
+ */
+function forbiddenResponse(): void
+{
+    http_response_code(403);
+    die('شما دسترسی لازم برای مشاهده این صفحه را ندارید.');
+}
+
+/**
+ * "create record" row of the permission matrix — docs/PERMISSIONS.md is the
+ * source of truth this and every other permission function here implements.
+ * Everyone but a viewer may write (and no recognized role at all fails
+ * closed, same as every other currentRole() caller). This only answers
+ * "may this user create/write at all" — whether they may write to one
+ * SPECIFIC existing record is the separate, narrower question
+ * canEditRecord() (includes/helpers.php) answers.
+ */
+function canWrite(): bool
+{
+    $role = currentRole();
+    return $role === 'owner' || $role === 'admin' || $role === 'member';
+}
+
+/**
+ * Gate for endpoints that create or otherwise write with no existing record
+ * to check ownership against (add.php, bulk-assign.php, create-inline.php,
+ * import) — refuses a viewer with the same 403 requireRole() uses. See
+ * docs/PERMISSIONS.md. Call after requireRole() has already established a
+ * logged-in user in an active workspace; this only adds the write check on
+ * top of that, it does not re-verify login or workspace membership itself.
+ */
+function requireWriteAccess(): void
+{
+    if (!canWrite()) {
+        forbiddenResponse();
     }
 }
 
@@ -247,56 +289,11 @@ function verifyCsrfToken(?string $token): bool
     return is_string($token) && !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
 
-const LOGIN_LOCKOUT_MAX_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_WINDOW_MINUTES = 15;
-const LOGIN_ATTEMPTS_RETENTION_HOURS = 24;
-
-/**
- * True when either this IP or this login identifier has LOGIN_LOCKOUT_MAX_ATTEMPTS
- * failed attempts logged within the last LOGIN_LOCKOUT_WINDOW_MINUTES minutes.
- * A rolling window, not a stored lockout-until timestamp — access is restored
- * automatically as the qualifying failures age past the window, up to fifteen
- * minutes after the last of them.
- *
- * Deliberately returns one bare bool: which axis (IP vs. username) actually
- * tripped it is never exposed to the caller, so the login page can never
- * reveal — even implicitly — which of the two is the one locked out.
- */
-function isLoginLocked(string $ip, string $username): bool
-{
-    $since = date('Y-m-d H:i:s', strtotime('-' . LOGIN_LOCKOUT_WINDOW_MINUTES . ' minutes'));
-
-    $ipStmt = platformDb()->prepare(
-        'SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND success = 0 AND attempted_at >= ?'
-    );
-    $ipStmt->execute([$ip, $since]);
-    if ((int) $ipStmt->fetchColumn() >= LOGIN_LOCKOUT_MAX_ATTEMPTS) {
-        return true;
-    }
-
-    $usernameStmt = platformDb()->prepare(
-        'SELECT COUNT(*) FROM login_attempts WHERE username = ? COLLATE NOCASE AND success = 0 AND attempted_at >= ?'
-    );
-    $usernameStmt->execute([$username, $since]);
-    return (int) $usernameStmt->fetchColumn() >= LOGIN_LOCKOUT_MAX_ATTEMPTS;
-}
-
-/**
- * Logs one login attempt and opportunistically purges anything older than
- * LOGIN_ATTEMPTS_RETENTION_HOURS. This app has no cron runner yet (see
- * docs/ROADMAP-SAAS.md Phase 15), so the table keeps itself bounded here
- * instead of depending on a scheduled job that doesn't exist.
- */
-function recordLoginAttempt(string $ip, string $username, bool $success): void
-{
-    $platform = platformDb();
-
-    $cutoff = date('Y-m-d H:i:s', strtotime('-' . LOGIN_ATTEMPTS_RETENTION_HOURS . ' hours'));
-    $platform->prepare('DELETE FROM login_attempts WHERE attempted_at < ?')->execute([$cutoff]);
-
-    $platform->prepare('INSERT INTO login_attempts (ip, username, success) VALUES (?, ?, ?)')
-        ->execute([$ip, $username, $success ? 1 : 0]);
-}
+// LOGIN_LOCKOUT_MAX_ATTEMPTS, isLoginLocked(), recordLoginAttempt(), etc.
+// moved to includes/login-lockout.php (required above) so admin/login.php
+// can reuse the exact same login_attempts-backed lockout without pulling in
+// this entire file — it redeclares its own e() (admin/_guard.php), which
+// would fatal if this file's own e() below loaded alongside it.
 
 function e(?string $value): string
 {

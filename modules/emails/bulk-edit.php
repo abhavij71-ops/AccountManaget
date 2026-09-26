@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 
@@ -24,7 +25,22 @@ if (!$ids) {
 $placeholders = implode(', ', array_fill(0, count($ids), '?'));
 $stmt = $pdo->prepare("SELECT * FROM emails WHERE id IN ($placeholders) ORDER BY email_address");
 $stmt->execute($ids);
-$emails = $stmt->fetchAll();
+$fetchedEmails = $stmt->fetchAll();
+
+if (!$fetchedEmails) {
+    flashSet('danger', t('emails.no_valid_emails'));
+    header('Location: index.php');
+    exit;
+}
+
+// Bulk operations: a member may only act on rows they can edit
+// (docs/PERMISSIONS.md) — rows they don't own are silently dropped here so
+// they never appear in the preview or get written to, rather than erroring.
+$emails = array_values(array_filter(
+    $fetchedEmails,
+    static fn ($email) => canEditRecord($email['visibility'], $email['owner_user_id'] !== null ? (int) $email['owner_user_id'] : null)
+));
+$permissionSkipped = count($fetchedEmails) - count($emails);
 
 if (!$emails) {
     flashSet('danger', t('emails.no_valid_emails'));
@@ -103,7 +119,11 @@ if (($_POST['action'] ?? '') === 'apply') {
                 $pdo->rollBack();
             } else {
                 $pdo->commit();
-                flashSet('success', t('emails.bulk_apply_success', ['count' => count($emails)]));
+                $message = t('emails.bulk_apply_success', ['count' => count($emails)]);
+                if ($permissionSkipped > 0) {
+                    $message .= ' ' . t('emails.bulk_apply_skipped_message', ['count' => $permissionSkipped]);
+                }
+                flashSet('success', $message);
                 header('Location: index.php');
                 exit;
             }

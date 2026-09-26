@@ -17,6 +17,7 @@ $service = $stmt->fetch();
 if (!$service || !canSeeRecord($service['visibility'] ?? null, isset($service['owner_user_id']) ? (int) $service['owner_user_id'] : null)) {
     notFoundResponse(t('services.not_found'));
 }
+requireEditRecord($service);
 
 $ownerUserId = isset($service['owner_user_id']) && $service['owner_user_id'] !== null ? (int) $service['owner_user_id'] : null;
 $canManageVisibility = canManageRecordVisibility($ownerUserId);

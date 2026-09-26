@@ -61,7 +61,7 @@ if ($q !== '') {
            OR EXISTS (SELECT 1 FROM custom_fields cf
                       WHERE cf.account_id = a.id AND (cf.field_key LIKE :q OR cf.field_value LIKE :q))
            OR EXISTS (SELECT 1 FROM payments p2 WHERE p2.account_id = a.id AND p2.payment_reference LIKE :q))
-           AND " . visibilityScope('a') . '
+           AND " . visibilityScope('accounts', 'a') . '
         ORDER BY a.username LIMIT 30');
     $stmt->execute(['q' => $like]);
     $accountResults = $stmt->fetchAll();

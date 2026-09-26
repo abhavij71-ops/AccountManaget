@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 
 requireLogin();
+requireWriteAccess();
 
 $entities = [
     'emails' => t('nav.emails'),

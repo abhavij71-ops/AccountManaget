@@ -3,31 +3,170 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/mail.php';
+require_once __DIR__ . '/includes/notify.php';
+require_once __DIR__ . '/includes/audit.php';
 
 requireLogin();
 
 $user = currentUser();
+// SMTP credentials are shared platform-wide (app_settings lives in the
+// central database, not a per-workspace one), so only the highest workspace
+// role may view or change them — not the members.php owner+admin pair.
+$isOwner = currentRole() === 'owner';
 $errors = [];
 $totpErrors = [];
+
+$workspaceId = currentWorkspaceId();
+$workspaceName = '';
+if ($workspaceId !== null) {
+    $workspaceNameStmt = platformDb()->prepare('SELECT name FROM workspaces WHERE id = ? LIMIT 1');
+    $workspaceNameStmt->execute([$workspaceId]);
+    $workspaceName = (string) $workspaceNameStmt->fetchColumn();
+}
+
+// Computed unconditionally (not just inside the delete_account handler) so
+// the "Delete my account" section can explain up front why it's blocked,
+// rather than only after a failed attempt.
+$soleOwnershipBlockers = findSoleOwnershipBlockers(platformDb(), currentUserId());
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? 'change_password');
 
-    if ($action === 'download_backup') {
+    if ($action === 'download_workspace_data') {
+        if (!$isOwner || $workspaceId === null || !verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+            flashSet('danger', t('msg.invalid_request'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        $workspacePath = workspaceDatabasePath($workspaceId);
+        if (!file_exists($workspacePath)) {
+            flashSet('danger', tOr('settings.workspace_download_missing', 'No workspace database file was found.'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        // Flush WAL into the main file first (same reasoning as
+        // cron-backup.php's backupOneDatabase()) so the downloaded file
+        // reflects every committed write, not just whatever happened to be
+        // checkpointed already.
+        $checkpointPdo = new PDO('sqlite:' . $workspacePath);
+        $checkpointPdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        $checkpointPdo = null;
+
+        logAuditEvent('workspace.data_downloaded');
+
+        $filename = 'workspace-' . $workspaceId . '-' . date('Y-m-d-His') . '.sqlite';
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . filesize($workspacePath));
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        readfile($workspacePath);
+        exit;
+    } elseif ($action === 'delete_workspace') {
+        if (!$isOwner || $workspaceId === null || !verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+            flashSet('danger', t('msg.invalid_request'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        $confirmName = trim((string) ($_POST['confirm_workspace_name'] ?? ''));
+        if ($workspaceName === '' || $confirmName !== $workspaceName) {
+            flashSet('danger', tOr('settings.delete_workspace_name_mismatch', 'The workspace name you typed does not match — nothing was deleted.'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        $platform = platformDb();
+        $platform->beginTransaction();
+        try {
+            // Explicit, not left to a foreign-key cascade — the spec calls
+            // out "purge all memberships" as its own step.
+            $platform->prepare('DELETE FROM invitations WHERE workspace_id = ?')->execute([$workspaceId]);
+            $platform->prepare('DELETE FROM memberships WHERE workspace_id = ?')->execute([$workspaceId]);
+            $platform->prepare('DELETE FROM workspaces WHERE id = ?')->execute([$workspaceId]);
+            logAuditEvent('workspace.deleted', details: ['workspace_name' => $workspaceName], workspaceId: $workspaceId);
+            $platform->commit();
+        } catch (Throwable $e) {
+            $platform->rollBack();
+            flashSet('danger', tOr('settings.delete_workspace_error', 'Could not delete the workspace.'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        // The file is deleted only after every central-database row is
+        // confirmed gone — the other order risks a workspace record left
+        // pointing at nothing if the delete had failed partway.
+        $workspacePath = workspaceDatabasePath($workspaceId);
+        foreach ([$workspacePath, $workspacePath . '-wal', $workspacePath . '-shm'] as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+
+        unset($_SESSION['workspace_id'], $_SESSION['role']);
+        flashSet('success', tOr('settings.delete_workspace_success', 'The workspace has been deleted.'));
+        header('Location: ' . appUrl('select-workspace.php'));
+        exit;
+    } elseif ($action === 'delete_account') {
         if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
             flashSet('danger', t('msg.invalid_request'));
             header('Location: settings.php');
             exit;
         }
-        // requireLogin() now re-verifies is_active on every request (see includes/auth.php),
-        // so a deactivated account's session can no longer reach this far — no local re-check needed.
-        $filename = 'account-manager-backup-' . date('Y-m-d-His') . '.sqlite';
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . filesize(DB_PATH));
-        header('Pragma: no-cache');
-        header('Expires: 0');
-        readfile(DB_PATH);
+
+        if ($soleOwnershipBlockers) {
+            flashSet('danger', tOr('settings.delete_account_blocked', 'You are the sole owner of a workspace — delete or transfer it first:') . ' ' . implode(', ', $soleOwnershipBlockers));
+            header('Location: settings.php');
+            exit;
+        }
+
+        $hashStmt = platformDb()->prepare('SELECT password_hash FROM accounts_users WHERE id = ?');
+        $hashStmt->execute([currentUserId()]);
+        $hash = $hashStmt->fetchColumn();
+        if (!$hash || !password_verify((string) ($_POST['current_password'] ?? ''), $hash)) {
+            flashSet('danger', tOr('settings.delete_account_wrong_password', 'Incorrect password — your account was not deleted.'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        $userId = currentUserId();
+        $platform = platformDb();
+        $platform->beginTransaction();
+        try {
+            // Logged BEFORE the deletes below, not after: audit_log.user_id
+            // still has a real foreign key to accounts_users(id) (migrations/
+            // platform/005_add_sessions_and_audit_log.php) — inserting this
+            // row once that id no longer exists in accounts_users fails the
+            // FK check outright. Note this still means the row this creates
+            // is itself removed by that same FK's ON DELETE CASCADE the
+            // instant the DELETE FROM accounts_users below runs, inside this
+            // same transaction — this reorder only stops the crash, it does
+            // not give account deletion a surviving audit record. Making
+            // that record actually durable needs a schema change (dropping
+            // the CASCADE) beyond what was asked for here.
+            logAuditEvent('account.deleted', userId: $userId);
+            $platform->prepare('DELETE FROM memberships WHERE user_id = ?')->execute([$userId]);
+            $platform->prepare('DELETE FROM sessions WHERE user_id = ?')->execute([$userId]);
+            $platform->prepare('DELETE FROM totp_recovery_codes WHERE user_id = ?')->execute([$userId]);
+            $platform->prepare('DELETE FROM accounts_users WHERE id = ?')->execute([$userId]);
+            $platform->commit();
+        } catch (Throwable $e) {
+            $platform->rollBack();
+            flashSet('danger', tOr('settings.delete_account_error', 'Could not delete your account.'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        header('Location: ' . appUrl('login.php'));
         exit;
     } elseif ($action === 'start_totp_enroll') {
         if (verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -76,6 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // the only time these plain-text codes ever exist outside
                     // this one request.
                     $_SESSION['totp_new_recovery_codes'] = $recoveryCodes;
+                    logAuditEvent('totp.enabled', 'user', currentUserId());
                     flashSet('success', t('settings.totp_enabled_success'));
                     header('Location: settings.php');
                     exit;
@@ -106,6 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if (!$totpErrors) {
+                    logAuditEvent('totp.disabled', 'user', currentUserId());
                     flashSet('success', t('settings.totp_disabled_success'));
                     header('Location: settings.php');
                     exit;
@@ -131,6 +272,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         session_destroy();
         header('Location: ' . appUrl('login.php'));
+        exit;
+    } elseif ($action === 'save_notification_preference') {
+        if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+            flashSet('danger', t('msg.invalid_request'));
+            header('Location: settings.php');
+            exit;
+        }
+
+        $channel = (string) ($_POST['notification_channel'] ?? 'email');
+        $phoneNumber = trim((string) ($_POST['notification_phone'] ?? ''));
+
+        if (!in_array($channel, ['email', 'sms', 'both'], true)) {
+            flashSet('danger', tOr('settings.notification_invalid', 'Choose a valid notification channel.'));
+        } elseif (($channel === 'sms' || $channel === 'both') && $phoneNumber === '') {
+            flashSet('danger', tOr('settings.notification_phone_required', 'A phone number is required for SMS notifications.'));
+        } else {
+            saveNotificationPreference(currentUserId(), $channel, $phoneNumber);
+            flashSet('success', tOr('settings.notification_saved_success', 'Notification preferences saved.'));
+        }
+
+        header('Location: settings.php');
         exit;
     } elseif ($action === 'change_password') {
         if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -181,6 +343,8 @@ $sessionsStmt->execute([currentUserId()]);
 $activeSessions = $sessionsStmt->fetchAll();
 $currentDeviceTokenHash = isset($_SESSION['device_token']) ? hash('sha256', (string) $_SESSION['device_token']) : '';
 
+$notificationPreference = getNotificationPreference(currentUserId());
+
 $csrf = csrfToken();
 $pageTitle = t('nav.settings');
 require __DIR__ . '/includes/header.php';
@@ -200,16 +364,44 @@ require __DIR__ . '/includes/header.php';
         </div>
 
         <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold"><?= e(t('settings.backup_title')) ?></div>
+            <div class="card-header bg-white fw-bold"><?= e(tOr('settings.notification_title', 'Notification preferences')) ?></div>
             <div class="card-body">
-                <p class="text-muted small"><?= e(t('settings.backup_description')) ?></p>
-                <form method="post">
+                <p class="text-muted small"><?= e(tOr('settings.notification_description', 'How you want to hear about upcoming renewals and critical alerts. Everything else is always sent by email.')) ?></p>
+                <form method="post" class="row g-2 align-items-end">
                     <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-                    <input type="hidden" name="action" value="download_backup">
-                    <button type="submit" class="btn btn-outline-primary"><?= e(t('settings.download_backup_button')) ?></button>
+                    <input type="hidden" name="action" value="save_notification_preference">
+                    <div class="col-md-6">
+                        <label class="form-label"><?= e(tOr('settings.notification_channel', 'Channel')) ?></label>
+                        <select name="notification_channel" class="form-select">
+                            <option value="email" <?= $notificationPreference['channel'] === 'email' ? 'selected' : '' ?>><?= e(tOr('settings.notification_channel_email', 'Email')) ?></option>
+                            <option value="sms" <?= $notificationPreference['channel'] === 'sms' ? 'selected' : '' ?>><?= e(tOr('settings.notification_channel_sms', 'SMS')) ?></option>
+                            <option value="both" <?= $notificationPreference['channel'] === 'both' ? 'selected' : '' ?>><?= e(tOr('settings.notification_channel_both', 'Both')) ?></option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label"><?= e(tOr('settings.notification_phone', 'Phone number (for SMS)')) ?></label>
+                        <input type="text" name="notification_phone" class="form-control" value="<?= e($notificationPreference['phone_number']) ?>" placeholder="09xxxxxxxxx">
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary"><?= e(tOr('settings.notification_save_button', 'Save preferences')) ?></button>
+                    </div>
                 </form>
             </div>
         </div>
+
+        <?php if ($isOwner && $workspaceId !== null): ?>
+        <div class="card am-card mb-3">
+            <div class="card-header bg-white fw-bold"><?= e(tOr('settings.workspace_data_title', 'Your workspace data')) ?></div>
+            <div class="card-body">
+                <p class="text-muted small"><?= e(tOr('settings.workspace_data_description', 'Download the complete database for this workspace — every record it holds, in one file.')) ?></p>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="action" value="download_workspace_data">
+                    <button type="submit" class="btn btn-outline-primary"><?= e(tOr('settings.download_workspace_data_button', 'Download all my data')) ?></button>
+                </form>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 
     <div class="col-lg-6">
@@ -365,4 +557,63 @@ require __DIR__ . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<!--
+    SMTP and SMS provider settings used to live here, gated by $isOwner —
+    but $isOwner means "owner of the CURRENT WORKSPACE", while both were
+    writes to platform-wide app_settings shared by every tenant. Any
+    self-registered user owns their own workspace, so this let a stranger
+    who had just signed up point every tenant's outgoing mail (and SMS) at
+    their own server. Moved to admin/settings.php, behind
+    requireAdminAuth() — see that file.
+-->
+
+<div class="card am-card border-danger mb-3">
+    <div class="card-header bg-white fw-bold text-danger"><?= e(tOr('settings.danger_zone_title', 'Danger zone')) ?></div>
+    <div class="card-body">
+        <?php if ($isOwner && $workspaceId !== null): ?>
+            <div class="mb-4 pb-4 border-bottom">
+                <h2 class="h6"><?= e(tOr('settings.delete_workspace_title', 'Delete this workspace')) ?></h2>
+                <p class="text-muted small">
+                    <?= e(tOr('settings.delete_workspace_description', 'Permanently deletes every record in this workspace, removes every member, and cannot be undone. To confirm, type the workspace name exactly:')) ?>
+                    <strong><?= e($workspaceName) ?></strong>
+                </p>
+                <form method="post" class="row g-2 align-items-end" data-confirm="<?= e(tOr('settings.delete_workspace_confirm', 'This permanently deletes the workspace and everything in it. Continue?')) ?>">
+                    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="action" value="delete_workspace">
+                    <div class="col-md-8">
+                        <input type="text" name="confirm_workspace_name" class="form-control" placeholder="<?= e($workspaceName) ?>" autocomplete="off" required>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-danger w-100"><?= e(tOr('settings.delete_workspace_button', 'Delete workspace')) ?></button>
+                    </div>
+                </form>
+            </div>
+        <?php endif; ?>
+
+        <div>
+            <h2 class="h6"><?= e(tOr('settings.delete_account_title', 'Delete your account')) ?></h2>
+            <?php if ($soleOwnershipBlockers): ?>
+                <div class="alert alert-warning py-2">
+                    <?= e(tOr('settings.delete_account_blocked', 'You are the sole owner of a workspace — delete or transfer it first:')) ?>
+                    <strong><?= e(implode(', ', $soleOwnershipBlockers)) ?></strong>
+                </div>
+            <?php else: ?>
+                <p class="text-muted small"><?= e(tOr('settings.delete_account_description', 'Permanently deletes your account and removes you from every workspace. This cannot be undone.')) ?></p>
+                <form method="post" class="row g-2 align-items-end" data-confirm="<?= e(tOr('settings.delete_account_confirm', 'This permanently deletes your account. Continue?')) ?>">
+                    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                    <input type="hidden" name="action" value="delete_account">
+                    <div class="col-md-8">
+                        <label class="form-label"><?= e(t('settings.current_password')) ?></label>
+                        <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-danger w-100"><?= e(tOr('settings.delete_account_button', 'Delete my account')) ?></button>
+                    </div>
+                </form>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
 <?php require __DIR__ . '/includes/footer.php'; ?>

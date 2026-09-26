@@ -36,39 +36,37 @@ function addVisibilityColumnsToTable(
     $oldTable = $table . '_old';
     $cols = implode(', ', $columns);
 
-    $pdo->exec('PRAGMA legacy_alter_table = ON');
-    $pdo->exec('PRAGMA foreign_keys = OFF');
-    try {
-        $pdo->exec("ALTER TABLE {$table} RENAME TO {$oldTable}");
+    // Requires PRAGMA foreign_keys = OFF and PRAGMA legacy_alter_table = ON
+    // to already be set on $pdo — runMigrations() (includes/migrator.php)
+    // sets both once for the whole migration batch, outside any
+    // transaction, since SQLite silently ignores both pragmas once a
+    // transaction is already open.
+    $pdo->exec("ALTER TABLE {$table} RENAME TO {$oldTable}");
 
-        // These index/trigger names followed the table into {$oldTable} on rename.
-        foreach (array_keys($indexes) as $indexName) {
-            $pdo->exec("DROP INDEX IF EXISTS {$indexName}");
-        }
-        if ($hasUpdatedAtTrigger) {
-            $pdo->exec("DROP TRIGGER IF EXISTS trg_{$table}_updated_at");
-        }
+    // These index/trigger names followed the table into {$oldTable} on rename.
+    foreach (array_keys($indexes) as $indexName) {
+        $pdo->exec("DROP INDEX IF EXISTS {$indexName}");
+    }
+    if ($hasUpdatedAtTrigger) {
+        $pdo->exec("DROP TRIGGER IF EXISTS trg_{$table}_updated_at");
+    }
 
-        $pdo->exec($createSql);
+    $pdo->exec($createSql);
 
-        $pdo->exec("INSERT INTO {$table} ({$cols}) SELECT {$cols} FROM {$oldTable}");
+    $pdo->exec("INSERT INTO {$table} ({$cols}) SELECT {$cols} FROM {$oldTable}");
 
-        $pdo->exec("DROP TABLE {$oldTable}");
+    $pdo->exec("DROP TABLE {$oldTable}");
 
-        foreach ($indexes as $createIndexSql) {
-            $pdo->exec($createIndexSql);
-        }
-        if ($hasUpdatedAtTrigger) {
-            $pdo->exec("CREATE TRIGGER trg_{$table}_updated_at
-                AFTER UPDATE ON {$table}
-                FOR EACH ROW
-                BEGIN
-                    UPDATE {$table} SET updated_at = datetime('now') WHERE id = NEW.id;
-                END");
-        }
-    } finally {
-        $pdo->exec('PRAGMA foreign_keys = ON');
-        $pdo->exec('PRAGMA legacy_alter_table = OFF');
+    foreach ($indexes as $createIndexSql) {
+        $pdo->exec($createIndexSql);
+    }
+    if ($hasUpdatedAtTrigger) {
+        $pdo->exec("CREATE TRIGGER trg_{$table}_updated_at
+            AFTER UPDATE ON {$table}
+            FOR EACH ROW
+            BEGIN
+                UPDATE {$table} SET updated_at = datetime('now') WHERE id = NEW.id;
+            END");
     }
 }
 

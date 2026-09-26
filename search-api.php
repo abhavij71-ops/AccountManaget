@@ -16,10 +16,22 @@ $results = [];
 if ($q !== '') {
     $like = '%' . $q . '%';
 
+    // Every entity query below is restricted to what the current user's role
+    // may see (docs/PERMISSIONS.md) — without this, search surfaced private
+    // records owned by someone else to any member/viewer who could guess or
+    // stumble onto matching text (VERIFIED: an owner's private email was
+    // returned to a member and a viewer here despite being correctly hidden
+    // from the list/view pages).
+    $emailsScope = visibilityScope('emails');
+    $servicesScope = visibilityScope('services');
+    $accountsScope = visibilityScope('accounts', 'a');
+    $phonesScope = visibilityScope('phones');
+
     $stmt = $pdo->prepare("SELECT id, email_address, type, status FROM emails
-        WHERE email_address LIKE :q OR display_name LIKE :q OR provider LIKE :q OR purpose LIKE :q OR notes LIKE :q
+        WHERE (email_address LIKE :q OR display_name LIKE :q OR provider LIKE :q OR purpose LIKE :q OR notes LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
-                      WHERE tg.entity_type = 'email' AND tg.entity_id = emails.id AND t.name LIKE :q)
+                      WHERE tg.entity_type = 'email' AND tg.entity_id = emails.id AND t.name LIKE :q))
+           AND ($emailsScope)
         ORDER BY email_address LIMIT 8");
     $stmt->execute(['q' => $like]);
     foreach ($stmt->fetchAll() as $row) {
@@ -34,9 +46,10 @@ if ($q !== '') {
     }
 
     $stmt = $pdo->prepare("SELECT id, service_name, category, status FROM services
-        WHERE service_name LIKE :q OR category LIKE :q OR website LIKE :q OR purpose LIKE :q OR notes LIKE :q
+        WHERE (service_name LIKE :q OR category LIKE :q OR website LIKE :q OR purpose LIKE :q OR notes LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
-                      WHERE tg.entity_type = 'service' AND tg.entity_id = services.id AND t.name LIKE :q)
+                      WHERE tg.entity_type = 'service' AND tg.entity_id = services.id AND t.name LIKE :q))
+           AND ($servicesScope)
         ORDER BY service_name LIMIT 8");
     $stmt->execute(['q' => $like]);
     foreach ($stmt->fetchAll() as $row) {
@@ -59,13 +72,14 @@ if ($q !== '') {
         JOIN services s ON s.id = a.service_id
         LEFT JOIN emails e ON e.id = a.email_id
         LEFT JOIN phones p ON p.id = a.identity_phone_id
-        WHERE a.username LIKE :q OR a.display_name LIKE :q OR a.external_account_id LIKE :q OR a.notes LIKE :q
+        WHERE (a.username LIKE :q OR a.display_name LIKE :q OR a.external_account_id LIKE :q OR a.notes LIKE :q
            OR a.identity_value LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
                       WHERE tg.entity_type = 'account' AND tg.entity_id = a.id AND t.name LIKE :q)
            OR EXISTS (SELECT 1 FROM custom_fields cf
                       WHERE cf.account_id = a.id AND (cf.field_key LIKE :q OR cf.field_value LIKE :q))
-           OR EXISTS (SELECT 1 FROM payments p2 WHERE p2.account_id = a.id AND p2.payment_reference LIKE :q)
+           OR EXISTS (SELECT 1 FROM payments p2 WHERE p2.account_id = a.id AND p2.payment_reference LIKE :q))
+           AND ($accountsScope)
         ORDER BY a.username LIMIT 8");
     $stmt->execute(['q' => $like]);
     foreach ($stmt->fetchAll() as $row) {
@@ -86,9 +100,10 @@ if ($q !== '') {
     }
 
     $stmt = $pdo->prepare("SELECT id, phone_number, label, status FROM phones
-        WHERE phone_number LIKE :q OR label LIKE :q OR notes LIKE :q
+        WHERE (phone_number LIKE :q OR label LIKE :q OR notes LIKE :q
            OR EXISTS (SELECT 1 FROM taggables tg JOIN tags t ON t.id = tg.tag_id
-                      WHERE tg.entity_type = 'phone' AND tg.entity_id = phones.id AND t.name LIKE :q)
+                      WHERE tg.entity_type = 'phone' AND tg.entity_id = phones.id AND t.name LIKE :q))
+           AND ($phonesScope)
         ORDER BY phone_number LIMIT 8");
     $stmt->execute(['q' => $like]);
     foreach ($stmt->fetchAll() as $row) {

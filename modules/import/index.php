@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/import.php';
 
-requireLogin();
+requireRole('owner', 'admin');
 
 $errors = [];
 $entity = (string) ($_POST['entity'] ?? 'account');
