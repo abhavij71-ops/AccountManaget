@@ -9,12 +9,26 @@ requireLogin();
 
 $pdo = db();
 $items = getNeedsAttentionItems($pdo);
+// The summary (and its counts-at-top cards below) is always computed from
+// the FULL, unfiltered/unpaginated list — it must reflect everything, not
+// just whatever level/page happens to be showing right now.
 $summary = needsAttentionSummary($items);
 
 $levelFilter = (string) ($_GET['level'] ?? '');
 if ($levelFilter !== '' && in_array($levelFilter, NEEDS_ATTENTION_LEVELS, true)) {
     $items = array_values(array_filter($items, static fn ($i) => $i['level'] === $levelFilter));
 }
+
+// 50/page by default (MEASURED: an unpaginated 3,000-account workspace
+// rendered a 7.7 MB page) — via the same pagination helper every list page
+// already uses, just seeded to 50 here instead of that helper's own
+// smaller default, since a 25-item default page would still be far too
+// small a slice of a multi-thousand-item report.
+$totalCount = count($items);
+$perPage = resolvePerPage($_GET['per_page'] ?? '50');
+$page = resolvePage($_GET['page'] ?? null);
+[$page, $limit, $offset] = paginationBounds($totalCount, $page, $perPage);
+$pageItems = $limit === null ? $items : array_slice($items, $offset, $limit);
 
 $pageTitle = t('nav.needs_attention');
 require __DIR__ . '/includes/header.php';
@@ -67,17 +81,25 @@ require __DIR__ . '/includes/header.php';
 <?php else: ?>
     <div class="card am-card">
         <ul class="list-group list-group-flush">
-            <?php foreach ($items as $item): ?>
+            <?php $lastLevel = null; ?>
+            <?php foreach ($pageItems as $item): ?>
+                <?php if ($item['level'] !== $lastLevel): ?>
+                    <?php $lastLevel = $item['level']; ?>
+                    <li class="list-group-item bg-light fw-bold d-flex align-items-center gap-2">
+                        <?= renderNeedsAttentionLevelBadge($lastLevel) ?>
+                        <span><?= e(needsAttentionLevelLabel($lastLevel)) ?> (<?= (int) $summary[$lastLevel] ?>)</span>
+                    </li>
+                <?php endif; ?>
                 <li class="list-group-item d-flex justify-content-between align-items-start flex-wrap gap-2">
                     <div>
-                        <?= renderNeedsAttentionLevelBadge($item['level']) ?>
-                        <a href="<?= e(appUrl($item['url'])) ?>" class="fw-bold ms-2"><?= e($item['title']) ?></a>
+                        <a href="<?= e(appUrl($item['url'])) ?>" class="fw-bold"><?= e($item['title']) ?></a>
                         <div class="text-muted small"><?= e($item['message']) ?></div>
                     </div>
                 </li>
             <?php endforeach; ?>
         </ul>
     </div>
+    <?= renderPagination($totalCount, $page, $perPage) ?>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

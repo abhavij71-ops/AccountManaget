@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/secrets.php';
+require_once __DIR__ . '/../includes/login-lockout.php';
 
 /**
  * Platform-operator access, deliberately independent of includes/auth.php's

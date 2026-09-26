@@ -7,6 +7,7 @@ require_once __DIR__ . '/../accounts/_lib.php';
 require_once __DIR__ . '/_lib.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $id = (int) ($_GET['id'] ?? 0);

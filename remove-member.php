@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/audit.php';
 
 requireRole('owner', 'admin');
 
@@ -159,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // dispositions again is a harmless no-op, since there's nothing left
             // for it to act on.
             $platform->prepare('DELETE FROM memberships WHERE id = ?')->execute([$membershipId]);
+            logAuditEvent('member.removed', 'membership', $membershipId, ['removed_user_id' => $departingUserId, 'disposition' => $disposition]);
             flashSet('success', t('members.remove_success'));
             header('Location: members.php');
             exit;

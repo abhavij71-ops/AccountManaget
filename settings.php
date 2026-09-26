@@ -33,23 +33,7 @@ $soleOwnershipBlockers = findSoleOwnershipBlockers(platformDb(), currentUserId()
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? 'change_password');
 
-    if ($action === 'download_backup') {
-        if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-            flashSet('danger', t('msg.invalid_request'));
-            header('Location: settings.php');
-            exit;
-        }
-        // requireLogin() now re-verifies is_active on every request (see includes/auth.php),
-        // so a deactivated account's session can no longer reach this far — no local re-check needed.
-        $filename = 'account-manager-backup-' . date('Y-m-d-His') . '.sqlite';
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . filesize(DB_PATH));
-        header('Pragma: no-cache');
-        header('Expires: 0');
-        readfile(DB_PATH);
-        exit;
-    } elseif ($action === 'download_workspace_data') {
+    if ($action === 'download_workspace_data') {
         if (!$isOwner || $workspaceId === null || !verifyCsrfToken($_POST['csrf_token'] ?? null)) {
             flashSet('danger', t('msg.invalid_request'));
             header('Location: settings.php');
@@ -231,6 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // the only time these plain-text codes ever exist outside
                     // this one request.
                     $_SESSION['totp_new_recovery_codes'] = $recoveryCodes;
+                    logAuditEvent('totp.enabled', 'user', currentUserId());
                     flashSet('success', t('settings.totp_enabled_success'));
                     header('Location: settings.php');
                     exit;
@@ -261,6 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if (!$totpErrors) {
+                    logAuditEvent('totp.disabled', 'user', currentUserId());
                     flashSet('success', t('settings.totp_disabled_success'));
                     header('Location: settings.php');
                     exit;
@@ -399,18 +385,6 @@ require __DIR__ . '/includes/header.php';
                     <div class="col-12">
                         <button type="submit" class="btn btn-primary"><?= e(tOr('settings.notification_save_button', 'Save preferences')) ?></button>
                     </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="card am-card mb-3">
-            <div class="card-header bg-white fw-bold"><?= e(t('settings.backup_title')) ?></div>
-            <div class="card-body">
-                <p class="text-muted small"><?= e(t('settings.backup_description')) ?></p>
-                <form method="post">
-                    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-                    <input type="hidden" name="action" value="download_backup">
-                    <button type="submit" class="btn btn-outline-primary"><?= e(t('settings.download_backup_button')) ?></button>
                 </form>
             </div>
         </div>

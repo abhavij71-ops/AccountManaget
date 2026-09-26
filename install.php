@@ -72,12 +72,15 @@ if (!$alreadyInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = true;
             $alreadyInstalled = true;
         } catch (Throwable $e) {
-            $error = 'خطا در نصب: ' . $e->getMessage();
+            error_log('Account Manager: install.php failed: ' . $e->getMessage());
+            $error = 'خطا در نصب. لطفاً لاگ خطای سرور را بررسی کنید یا با مدیر سیستم تماس بگیرید.'
+                . (APP_DEBUG ? ' (' . $e->getMessage() . ')' : '');
         }
     }
 }
 
 $csrf = csrfToken();
+$dataExposure = checkDataDirExposure();
 // No language session exists yet at install time — default to RTL.
 $bs = 'bootstrap.rtl.min.css';
 ?>
@@ -95,6 +98,21 @@ $bs = 'bootstrap.rtl.min.css';
         <div class="card-body p-4">
             <h1 class="h4 mb-1 text-center"><?= e(APP_NAME) ?></h1>
             <p class="text-muted text-center mb-4">نصب اولیه سیستم</p>
+
+            <?php if ($dataExposure === 'exposed'): ?>
+                <div class="alert alert-danger">
+                    <strong>هشدار امنیتی مهم:</strong> پوشه <code>data/</code> از طریق وب در دسترس است و فایل‌های حساس
+                    (از جمله دیتابیس) به‌طور مستقیم قابل دانلود هستند. فوراً محافظت وب‌سرور را بررسی کنید
+                    (<code>.htaccess</code> در Apache یا قانون <code>deny</code> در Nginx) یا <code>DATA_DIR</code>
+                    را به خارج از ریشه وب منتقل کنید — به <code>docs/INSTALLATION.md</code> مراجعه کنید.
+                </div>
+            <?php elseif ($dataExposure === 'unknown'): ?>
+                <div class="alert alert-warning">
+                    امکان بررسی محافظت پوشه <code>data/</code> وجود نداشت (درخواست آزمایشی ناموفق بود یا مسدود شد).
+                    این وضعیت به‌معنی امن‌بودن نیست — پس از نصب، آدرس <code>data/database.sqlite</code> را مستقیماً
+                    در مرورگر باز کنید؛ باید خطای 403 نمایش داده شود.
+                </div>
+            <?php endif; ?>
 
             <?php if ($alreadyInstalled && !$success): ?>
                 <div class="alert alert-info">

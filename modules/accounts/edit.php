@@ -14,6 +14,7 @@ $account = $id ? fetchAccountById($pdo, $id) : null;
 if (!$account || !canSeeRecord($account['visibility'] ?? null, isset($account['owner_user_id']) ? (int) $account['owner_user_id'] : null)) {
     notFoundResponse(t('accounts.not_found'));
 }
+requireEditRecord($account);
 
 $ownerUserId = isset($account['owner_user_id']) && $account['owner_user_id'] !== null ? (int) $account['owner_user_id'] : null;
 $canManageVisibility = canManageRecordVisibility($ownerUserId);
@@ -76,9 +77,15 @@ $form = [
     'pay_auto_renewal' => isset($payment['auto_renewal']) && $payment['auto_renewal'] !== null ? (string) (int) $payment['auto_renewal'] : '',
 ];
 
-$services = $pdo->query('SELECT id, service_name FROM services ORDER BY service_name')->fetchAll();
-$emails = $pdo->query('SELECT id, email_address FROM emails ORDER BY email_address')->fetchAll();
-$phones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY phone_number')->fetchAll();
+// Scoped to what the current user may see (docs/PERMISSIONS.md) — see
+// add.php's identical fix for the VERIFIED leak this closes. The account's
+// OWN already-linked service/email/phone/recovery values are still allowed
+// to save unchanged below even if scoping drops them from these lists (a
+// private resource someone else owns, linked before this fix existed) —
+// only a NEWLY chosen id has to be in the visible set.
+$services = $pdo->query('SELECT id, service_name FROM services WHERE ' . visibilityScope('services') . ' ORDER BY service_name')->fetchAll();
+$emails = $pdo->query('SELECT id, email_address FROM emails WHERE ' . visibilityScope('emails') . ' ORDER BY email_address')->fetchAll();
+$phones = $pdo->query('SELECT id, phone_number, label FROM phones WHERE ' . visibilityScope('phones') . ' ORDER BY phone_number')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -103,17 +110,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $emailId = (int) $form['email_id'];
     $identityPhoneId = (int) $form['identity_phone_id'];
 
-    if (!in_array($serviceId, array_column($services, 'id'), true)) {
+    // An id equal to what's already stored is always allowed through
+    // unchanged, even if visibilityScope() now excludes it from the
+    // dropdown (a linked private resource someone else owns, from before
+    // this fix existed) — only a NEWLY chosen id has to be visible.
+    $serviceIdUnchanged = $serviceId === (int) $account['service_id'];
+    $emailIdUnchanged = $emailId === (int) ($account['email_id'] ?? 0);
+    $identityPhoneIdUnchanged = $identityPhoneId === (int) ($account['identity_phone_id'] ?? 0);
+
+    if (!$serviceIdUnchanged && !in_array($serviceId, array_column($services, 'id'), true)) {
         $errors[] = t('accounts.service_required');
     }
     if (!in_array($form['identity_type'], ['email', 'phone', 'username', 'other'], true)) {
         $errors[] = t('accounts.identity_type_invalid');
     } elseif ($form['identity_type'] === 'email') {
-        if (!in_array($emailId, array_column($emails, 'id'), true)) {
+        if (!$emailIdUnchanged && !in_array($emailId, array_column($emails, 'id'), true)) {
             $errors[] = t('accounts.email_required');
         }
     } elseif ($form['identity_type'] === 'phone') {
-        if (!in_array($identityPhoneId, array_column($phones, 'id'), true)) {
+        if (!$identityPhoneIdUnchanged && !in_array($identityPhoneId, array_column($phones, 'id'), true)) {
             $errors[] = t('accounts.identity_phone_required');
         }
     } elseif ($form['identity_type'] === 'username' && $form['username'] === '') {
@@ -136,6 +151,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!array_key_exists($form['recovery_codes_status'], SECURITY_STATES)) {
         $errors[] = t('accounts.recovery_codes_status_invalid');
+    }
+    // A hidden id posted by hand must not be linkable: recovery_email_id/
+    // recovery_phone_id were otherwise stored straight from POST with no
+    // existence/visibility check at all. Same unchanged-is-allowed
+    // exception as service/email/phone above.
+    $recoveryEmailIdUnchanged = $form['recovery_email_id'] === (string) ($recovery['recovery_email_id'] ?? '');
+    $recoveryPhoneIdUnchanged = $form['recovery_phone_id'] === (string) ($recovery['recovery_phone_id'] ?? '');
+    if ($form['recovery_email_id'] !== '' && !$recoveryEmailIdUnchanged && !in_array((int) $form['recovery_email_id'], array_column($emails, 'id'), true)) {
+        $errors[] = t('accounts.recovery_email_invalid');
+    }
+    if ($form['recovery_phone_id'] !== '' && !$recoveryPhoneIdUnchanged && !in_array((int) $form['recovery_phone_id'], array_column($phones, 'id'), true)) {
+        $errors[] = t('accounts.recovery_phone_invalid');
     }
     if (!array_key_exists($form['sub_type'], SUBSCRIPTION_TYPES)) {
         $errors[] = t('accounts.sub_type_invalid');

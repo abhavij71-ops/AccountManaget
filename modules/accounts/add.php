@@ -7,6 +7,7 @@ require_once __DIR__ . '/_lib.php';
 require_once __DIR__ . '/../../includes/plans.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $errors = [];
@@ -62,9 +63,13 @@ $form = [
     'pay_auto_renewal' => '',
 ];
 
-$services = $pdo->query('SELECT id, service_name FROM services ORDER BY service_name')->fetchAll();
-$emails = $pdo->query('SELECT id, email_address FROM emails ORDER BY email_address')->fetchAll();
-$phones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY phone_number')->fetchAll();
+// Every option list here is scoped to what the current user may see
+// (docs/PERMISSIONS.md) — VERIFIED bug: a member's dropdown previously
+// offered another user's private email/service/phone by id, even though
+// they could never open it directly.
+$services = $pdo->query('SELECT id, service_name FROM services WHERE ' . visibilityScope('services') . ' ORDER BY service_name')->fetchAll();
+$emails = $pdo->query('SELECT id, email_address FROM emails WHERE ' . visibilityScope('emails') . ' ORDER BY email_address')->fetchAll();
+$phones = $pdo->query('SELECT id, phone_number, label FROM phones WHERE ' . visibilityScope('phones') . ' ORDER BY phone_number')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -117,6 +122,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!array_key_exists($form['recovery_codes_status'], SECURITY_STATES)) {
         $errors[] = t('accounts.recovery_codes_status_invalid');
     }
+    // A hidden id posted by hand must not be linkable: recovery_email_id/
+    // recovery_phone_id are otherwise stored straight from POST with no
+    // existence/visibility check at all — reject any id not in the
+    // already-scoped $emails/$phones lists above.
+    if ($form['recovery_email_id'] !== '' && !in_array((int) $form['recovery_email_id'], array_column($emails, 'id'), true)) {
+        $errors[] = t('accounts.recovery_email_invalid');
+    }
+    if ($form['recovery_phone_id'] !== '' && !in_array((int) $form['recovery_phone_id'], array_column($phones, 'id'), true)) {
+        $errors[] = t('accounts.recovery_phone_invalid');
+    }
     if (!array_key_exists($form['sub_type'], SUBSCRIPTION_TYPES)) {
         $errors[] = t('accounts.sub_type_invalid');
     }
@@ -133,8 +148,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = t('accounts.last4_invalid');
     }
 
-    if (!$errors && !checkPlanLimit('accounts', null, $pdo)) {
-        $planLimitReached = true;
+    if (!$errors) {
+        try {
+            assertCanAddAccounts(1);
+        } catch (PlanLimitException $e) {
+            $planLimitReached = true;
+        }
     }
 
     if (!$errors && !$planLimitReached) {
@@ -143,9 +162,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $stmt = $pdo->prepare('INSERT INTO accounts
                 (service_id, email_id, identity_type, identity_phone_id, identity_value, username, display_name, external_account_id, account_url, login_url,
-                 status, account_type, created_date, last_login, last_verified, notes)
+                 status, account_type, created_date, last_login, last_verified, notes, owner_user_id)
                 VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :display_name, :external_account_id, :account_url, :login_url,
-                 :status, :account_type, :created_date, :last_login, :last_verified, :notes)');
+                 :status, :account_type, :created_date, :last_login, :last_verified, :notes, :owner_user_id)');
             $stmt->execute([
                 'service_id' => $serviceId,
                 'email_id' => $emailId !== 0 ? $emailId : null,
@@ -163,6 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'last_login' => $form['last_login'] !== '' ? $form['last_login'] : null,
                 'last_verified' => $form['last_verified'] !== '' ? $form['last_verified'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'owner_user_id' => currentUserId(),
             ]);
             $accountId = (int) $pdo->lastInsertId();
 

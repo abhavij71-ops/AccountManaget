@@ -45,7 +45,15 @@ function runMigrations(PDO $pdo): void
 
     $dbPath = resolveDatabaseFilePath($pdo);
     $pdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
-    copy($dbPath, $dbPath . '.' . date('Ymd_His') . '.pre-migration.bak');
+    $backupPath = $dbPath . '.' . date('Ymd_His') . '.pre-migration.bak';
+    if (@copy($dbPath, $backupPath) === false) {
+        $lastError = error_get_last();
+        $reason = $lastError !== null ? $lastError['message'] : 'unknown error';
+        error_log("Account Manager: pre-migration backup failed for {$dbPath} -> {$backupPath}: {$reason}");
+        // Thrown before beginTransaction() — no migration has touched the
+        // database yet, so "no changes were made" is still true here.
+        throw new RuntimeException('Pre-migration backup failed — no changes were made. Check disk space and file permissions, then try again.');
+    }
 
     $pdo->exec('PRAGMA foreign_keys = OFF');
     $pdo->exec('PRAGMA legacy_alter_table = ON');

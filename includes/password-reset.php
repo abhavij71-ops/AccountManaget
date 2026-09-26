@@ -6,6 +6,57 @@ require_once __DIR__ . '/mail.php';
 
 const PASSWORD_RESET_TTL_HOURS = 2;
 
+const PASSWORD_RESET_REQUEST_MAX_PER_EMAIL = 3;
+const PASSWORD_RESET_REQUEST_MAX_PER_IP = 10;
+const PASSWORD_RESET_REQUEST_WINDOW_HOURS = 1;
+
+/**
+ * True when either this email address or this IP has already made its cap
+ * of forgot-password.php requests within the last
+ * PASSWORD_RESET_REQUEST_WINDOW_HOURS — checked BEFORE a new reset token is
+ * ever created, so a flood never queues more mail regardless of whether the
+ * email exists. Same "one bare bool, axis never revealed" contract as
+ * includes/login-lockout.php's isLoginLocked() — forgot-password.php's
+ * response is neutral either way, so which limit tripped (or whether the
+ * email is even registered) is never exposed to the caller.
+ */
+function isPasswordResetRequestLocked(string $email, string $ip): bool
+{
+    $since = date('Y-m-d H:i:s', strtotime('-' . PASSWORD_RESET_REQUEST_WINDOW_HOURS . ' hours'));
+    $platform = platformDb();
+
+    $emailStmt = $platform->prepare(
+        'SELECT COUNT(*) FROM password_reset_requests WHERE email = ? COLLATE NOCASE AND requested_at >= ?'
+    );
+    $emailStmt->execute([$email, $since]);
+    if ((int) $emailStmt->fetchColumn() >= PASSWORD_RESET_REQUEST_MAX_PER_EMAIL) {
+        return true;
+    }
+
+    $ipStmt = $platform->prepare(
+        'SELECT COUNT(*) FROM password_reset_requests WHERE ip = ? AND requested_at >= ?'
+    );
+    $ipStmt->execute([$ip, $since]);
+    return (int) $ipStmt->fetchColumn() >= PASSWORD_RESET_REQUEST_MAX_PER_IP;
+}
+
+/**
+ * Records one forgot-password.php submission and opportunistically purges
+ * anything older than the window — same self-bounding pattern as
+ * includes/login-lockout.php's recordLoginAttempt(), no cron job needed.
+ * Called for every submitted email (whether or not it's registered), never
+ * only for ones that turn out to belong to a real account — otherwise an
+ * attacker could probe unlimited nonexistent emails from one IP without
+ * ever being counted toward the per-IP cap.
+ */
+function recordPasswordResetRequest(string $email, string $ip): void
+{
+    $platform = platformDb();
+    $cutoff = date('Y-m-d H:i:s', strtotime('-' . PASSWORD_RESET_REQUEST_WINDOW_HOURS . ' hours'));
+    $platform->prepare('DELETE FROM password_reset_requests WHERE requested_at < ?')->execute([$cutoff]);
+    $platform->prepare('INSERT INTO password_reset_requests (email, ip) VALUES (?, ?)')->execute([$email, $ip]);
+}
+
 /**
  * Invalidates any earlier unused reset for this user before issuing a new
  * one — same "a fresh request replaces the old one" rule members.php

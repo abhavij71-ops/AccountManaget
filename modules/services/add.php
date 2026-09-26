@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $errors = [];
@@ -80,8 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO services (service_name, website, login_url, category, status, purpose, notes)
-                VALUES (:service_name, :website, :login_url, :category, :status, :purpose, :notes)');
+            $stmt = $pdo->prepare('INSERT INTO services (service_name, website, login_url, category, status, purpose, notes, owner_user_id)
+                VALUES (:service_name, :website, :login_url, :category, :status, :purpose, :notes, :owner_user_id)');
             $stmt->execute([
                 'service_name' => $form['service_name'],
                 'website' => $form['website'] !== '' ? $form['website'] : null,
@@ -90,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $form['status'],
                 'purpose' => $form['purpose'] !== '' ? $form['purpose'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'owner_user_id' => currentUserId(),
             ]);
             $newId = (int) $pdo->lastInsertId();
             log_history($pdo, 'service', $newId, 'Service Created');

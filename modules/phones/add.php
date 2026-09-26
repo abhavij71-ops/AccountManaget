@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $errors = [];
@@ -41,8 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO phones (phone_number, country, label, status, is_primary, notes)
-                VALUES (:phone_number, :country, :label, :status, :is_primary, :notes)');
+            $stmt = $pdo->prepare('INSERT INTO phones (phone_number, country, label, status, is_primary, notes, owner_user_id)
+                VALUES (:phone_number, :country, :label, :status, :is_primary, :notes, :owner_user_id)');
             $stmt->execute([
                 'phone_number' => $form['phone_number'],
                 'country' => $form['country'] !== '' ? $form['country'] : null,
@@ -50,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $form['status'],
                 'is_primary' => $form['is_primary'] === '1' ? 1 : 0,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'owner_user_id' => currentUserId(),
             ]);
             $newId = (int) $pdo->lastInsertId();
             log_history($pdo, 'phone', $newId, 'Phone Created');

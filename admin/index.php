@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_guard.php';
 require_once __DIR__ . '/../includes/platform-db.php';
+require_once __DIR__ . '/../includes/audit.php';
 
 requireAdminAuth();
 
@@ -18,6 +19,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($workspaceId > 0 && in_array($action, ['suspend', 'activate'], true)) {
         $platform->prepare('UPDATE workspaces SET is_suspended = ? WHERE id = ?')
             ->execute([$action === 'suspend' ? 1 : 0, $workspaceId]);
+        logAuditEvent(
+            $action === 'suspend' ? 'workspace.suspended' : 'workspace.unsuspended',
+            'workspace',
+            $workspaceId,
+            ['actor' => 'platform-admin'],
+            userId: null,
+            workspaceId: $workspaceId
+        );
     }
     header('Location: ' . APP_BASE_URL . '/admin/index.php');
     exit;
@@ -41,6 +50,7 @@ foreach ($platform->query(
 }
 
 $missingSecrets = missingSecrets();
+$dataExposure = checkDataDirExposure();
 $csrf = adminCsrfToken();
 ?>
 <!DOCTYPE html>
@@ -54,6 +64,23 @@ $csrf = adminCsrfToken();
 </head>
 <body>
 <div class="container py-4">
+    <?php if ($dataExposure === 'exposed'): ?>
+        <div class="alert alert-danger">
+            <strong>Critical: data/ is publicly downloadable.</strong> The exposure self-check just fetched its own
+            probe token back over HTTP — the web server is not blocking direct requests to <code>data/</code>
+            (every workspace's SQLite file, including password hashes and TOTP secrets, is reachable). Fix this
+            immediately: confirm <code>.htaccess</code> is honored on Apache, add the Nginx <code>deny</code> rule,
+            or move <code>DATA_DIR</code> outside the web root. See <code>docs/INSTALLATION.md</code>.
+        </div>
+    <?php elseif ($dataExposure === 'unknown'): ?>
+        <div class="alert alert-warning">
+            Could not verify whether <code>data/</code> is protected — the self-check's own loopback request
+            failed (common on shared hosting that blocks it). This is <strong>not</strong> a confirmation of
+            safety. Verify manually: opening <code>data/database.sqlite</code> directly in a browser must return
+            403 Forbidden.
+        </div>
+    <?php endif; ?>
+
     <?php if ($missingSecrets): ?>
         <div class="alert alert-warning">
             <strong>Missing configuration:</strong> the following secrets are not set —

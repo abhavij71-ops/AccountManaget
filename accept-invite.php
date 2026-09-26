@@ -13,8 +13,8 @@ $token = (string) ($_GET['token'] ?? $_POST['token'] ?? '');
 $platform = platformDb();
 $invitation = null;
 if ($token !== '') {
-    $stmt = $platform->prepare('SELECT * FROM invitations WHERE token = ? LIMIT 1');
-    $stmt->execute([$token]);
+    $stmt = $platform->prepare('SELECT * FROM invitations WHERE token_hash = ? LIMIT 1');
+    $stmt->execute([hash('sha256', $token)]);
     $invitation = $stmt->fetch() ?: null;
 }
 

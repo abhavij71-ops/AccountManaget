@@ -388,6 +388,7 @@ function importRow(PDO $pdo, string $entity, array $mapped, array $mapping, stri
     }
 
     if ($action === 'create' || ($action === 'update' && !$existingId)) {
+        $data['owner_user_id'] = currentUserId();
         $cols = array_keys($data);
         $sql = 'INSERT INTO ' . $table . ' (' . implode(', ', $cols) . ') VALUES (' . implode(', ', array_map(static fn ($c) => ':' . $c, $cols)) . ')';
         $stmt = $pdo->prepare($sql);

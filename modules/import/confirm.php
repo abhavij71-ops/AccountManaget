@@ -4,8 +4,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/import.php';
+require_once __DIR__ . '/../../includes/plans.php';
 
-requireLogin();
+requireRole('owner', 'admin');
 
 $pdo = db();
 $importState = $_SESSION['import'] ?? null;
@@ -26,6 +27,35 @@ $entity = $importState['entity'];
 $mapping = $importState['mapping'];
 $source = $importState['original_filename'];
 $parsed = parseCsvFile($importState['file_path']);
+
+// Whole-batch check up front, not row by row: a dry pass (no writes — same
+// read-only validateImportRow()/detectDuplicateStatus() the real loop below
+// uses) counts how many rows would actually result in a new account, then
+// checks that total once before the transaction even opens.
+if ($entity === 'account') {
+    $accountsToCreate = 0;
+    foreach ($parsed['rows'] as $i => $rawRow) {
+        $mapped = applyMapping($rawRow, $mapping);
+        if (validateImportRow($entity, $mapped, $pdo)) {
+            continue;
+        }
+        $dup = detectDuplicateStatus($entity, $mapped, $pdo);
+        $requestedAction = (string) ($_POST['action_' . $i] ?? 'skip');
+        $allowedActions = $dup['status'] === 'New' ? ['create', 'skip'] : ['skip', 'update', 'create'];
+        $action = in_array($requestedAction, $allowedActions, true) ? $requestedAction : 'skip';
+        if ($action === 'create' || ($action === 'update' && !$dup['existing_id'])) {
+            $accountsToCreate++;
+        }
+    }
+
+    try {
+        assertCanAddAccounts($accountsToCreate);
+    } catch (PlanLimitException $e) {
+        flashSet('warning', t('plans.limit_accounts_reached'));
+        header('Location: preview.php');
+        exit;
+    }
+}
 
 $created = 0;
 $updated = 0;

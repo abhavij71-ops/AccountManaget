@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_guard.php';
 require_once __DIR__ . '/../includes/platform-db.php';
 require_once __DIR__ . '/../includes/registration.php';
+require_once __DIR__ . '/../includes/audit.php';
 
 requireAdminAuth();
 
@@ -28,6 +29,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 completeEmailVerification($verification);
+                logAuditEvent(
+                    'user.approved',
+                    'user',
+                    (int) $verification['user_id'],
+                    ['actor' => 'platform-admin', 'workspace_name' => $verification['workspace_name']],
+                    userId: null
+                );
             } catch (Throwable $e) {
                 $approveError = 'Approval failed: ' . $e->getMessage();
             }

@@ -12,12 +12,17 @@ declare(strict_types=1);
  */
 function fetchCostsByCurrency(PDO $pdo): array
 {
-    $stmt = $pdo->query("SELECT currency, billing_cycle, COUNT(*) AS account_count, SUM(price) AS total
-        FROM subscriptions
-        WHERE type = 'Paid' AND status = 'Active' AND price IS NOT NULL
-              AND currency IS NOT NULL AND currency != ''
-        GROUP BY currency, billing_cycle
-        ORDER BY currency, billing_cycle");
+    // subscriptions has no owner_user_id of its own — scoped through the
+    // account each one belongs to (join through accounts, scope on
+    // accounts), same as every other subscriptions query in this file.
+    $stmt = $pdo->query("SELECT sub.currency, sub.billing_cycle, COUNT(*) AS account_count, SUM(sub.price) AS total
+        FROM subscriptions sub
+        JOIN accounts a ON a.id = sub.account_id
+        WHERE sub.type = 'Paid' AND sub.status = 'Active' AND sub.price IS NOT NULL
+              AND sub.currency IS NOT NULL AND sub.currency != ''
+              AND " . visibilityScope('accounts', 'a') . "
+        GROUP BY sub.currency, sub.billing_cycle
+        ORDER BY sub.currency, sub.billing_cycle");
     return $stmt->fetchAll();
 }
 
@@ -39,7 +44,8 @@ function fetchRenewals(PDO $pdo, int $upcomingDays = 30): array
         JOIN accounts a ON a.id = sub.account_id
         JOIN services s ON s.id = a.service_id
         JOIN emails e ON e.id = a.email_id
-        WHERE sub.status = 'Active' AND sub.renewal_date IS NOT NULL AND a.is_archived = 0";
+        WHERE sub.status = 'Active' AND sub.renewal_date IS NOT NULL AND a.is_archived = 0
+              AND " . visibilityScope('accounts', 'a');
 
     $overdueStmt = $pdo->prepare($base . ' AND sub.renewal_date < :today ORDER BY sub.renewal_date ASC');
     $overdueStmt->execute(['today' => $today]);
@@ -53,6 +59,7 @@ function fetchRenewals(PDO $pdo, int $upcomingDays = 30): array
         JOIN services s ON s.id = a.service_id
         JOIN emails e ON e.id = a.email_id
         WHERE sub.auto_renewal = 1 AND sub.status = 'Active' AND a.is_archived = 0
+              AND " . visibilityScope('accounts', 'a') . "
         ORDER BY sub.renewal_date IS NULL, sub.renewal_date ASC");
     $autoStmt->execute();
 

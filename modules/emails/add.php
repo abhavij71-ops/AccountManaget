@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/_lib.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $errors = [];
@@ -66,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             $stmt = $pdo->prepare('INSERT INTO emails
-                (email_address, display_name, provider, type, purpose, status, created_date, last_verified, notes)
-                VALUES (:email_address, :display_name, :provider, :type, :purpose, :status, :created_date, :last_verified, :notes)');
+                (email_address, display_name, provider, type, purpose, status, created_date, last_verified, notes, owner_user_id)
+                VALUES (:email_address, :display_name, :provider, :type, :purpose, :status, :created_date, :last_verified, :notes, :owner_user_id)');
             $stmt->execute([
                 'email_address' => $form['email_address'],
                 'display_name' => $form['display_name'] !== '' ? $form['display_name'] : null,
@@ -78,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'created_date' => $form['created_date'] !== '' ? $form['created_date'] : null,
                 'last_verified' => $form['last_verified'] !== '' ? $form['last_verified'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'owner_user_id' => currentUserId(),
             ]);
             $emailId = (int) $pdo->lastInsertId();
 

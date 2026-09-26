@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_guard.php';
 require_once __DIR__ . '/../includes/mail.php';
 require_once __DIR__ . '/../includes/registration.php';
+require_once __DIR__ . '/../includes/audit.php';
 
 requireAdminAuth();
 
@@ -51,6 +52,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'smtp_from_address' => $fromAddress,
                 'smtp_from_name' => $fromName,
             ], $password !== '' ? $password : null);
+            logAuditEvent('smtp.changed', null, null, [
+                'actor' => 'platform-admin',
+                'host' => $host,
+                'password_changed' => $password !== '',
+            ], userId: null);
             header('Location: ' . APP_BASE_URL . '/admin/settings.php');
             exit;
         }

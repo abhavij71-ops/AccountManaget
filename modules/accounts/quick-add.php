@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/plans.php';
 
 requireLogin();
+requireWriteAccess();
 
 $pdo = db();
 $errors = [];
+$planLimitReached = false;
 $form = [
     'service_id' => '',
     'identity_type' => 'email',
@@ -20,9 +23,11 @@ $form = [
     'notes' => '',
 ];
 
-$services = $pdo->query('SELECT id, service_name FROM services ORDER BY service_name')->fetchAll();
-$emails = $pdo->query('SELECT id, email_address FROM emails ORDER BY email_address')->fetchAll();
-$phones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY phone_number')->fetchAll();
+// Scoped to what the current user may see (docs/PERMISSIONS.md) — see
+// add.php's identical fix for the VERIFIED leak this closes.
+$services = $pdo->query('SELECT id, service_name FROM services WHERE ' . visibilityScope('services') . ' ORDER BY service_name')->fetchAll();
+$emails = $pdo->query('SELECT id, email_address FROM emails WHERE ' . visibilityScope('emails') . ' ORDER BY email_address')->fetchAll();
+$phones = $pdo->query('SELECT id, phone_number, label FROM phones WHERE ' . visibilityScope('phones') . ' ORDER BY phone_number')->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
@@ -63,10 +68,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         try {
+            assertCanAddAccounts(1);
+        } catch (PlanLimitException $e) {
+            $planLimitReached = true;
+        }
+    }
+
+    if (!$errors && !$planLimitReached) {
+        try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, identity_value, username, status, notes)
-                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :status, :notes)');
+            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, identity_value, username, status, notes, owner_user_id)
+                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :status, :notes, :owner_user_id)');
             $stmt->execute([
                 'service_id' => $serviceId,
                 'email_id' => $emailId !== 0 ? $emailId : null,
@@ -76,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'username' => $form['username'] !== '' ? $form['username'] : null,
                 'status' => $form['status'],
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'owner_user_id' => currentUserId(),
             ]);
             $accountId = (int) $pdo->lastInsertId();
 
@@ -116,6 +130,13 @@ require __DIR__ . '/../../includes/header.php';
         <ul class="mb-0">
             <?php foreach ($errors as $err): ?><li><?= e($err) ?></li><?php endforeach; ?>
         </ul>
+    </div>
+<?php endif; ?>
+
+<?php if ($planLimitReached): ?>
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><?= e(t('plans.limit_accounts_reached')) ?></span>
+        <a href="<?= e(appUrl('plans.php')) ?>" class="btn btn-sm btn-primary"><?= e(t('plans.upgrade_button')) ?></a>
     </div>
 <?php endif; ?>
 

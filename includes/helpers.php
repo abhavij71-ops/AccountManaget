@@ -367,41 +367,54 @@ const VISIBILITY_SCOPED_TABLES = ['emails', 'services', 'accounts', 'phones'];
  * fixed whitelist and the only other value embedded is the current session's
  * own int user id, so this is safe to concatenate directly into a query)
  * restricting rows to what the current user's role in the active workspace
- * is allowed to see:
+ * is allowed to see — the "see private record" row of the permission matrix
+ * in docs/PERMISSIONS.md (the source of truth for this and every other
+ * permission function on this page):
  *
- * - owner/admin: everything — no restriction.
- * - member/viewer, or no recognized role at all (fail closed rather than
- *   open): workspace-visible records, plus their own private ones.
+ * - owner: everything — no restriction.
+ * - admin/member/viewer, or no recognized role at all (fail closed rather
+ *   than open): workspace-visible records, plus their own private ones.
+ *   DECISION (docs/PERMISSIONS.md): admin does NOT see other users'
+ *   private records — only owner gets the unrestricted '1=1'.
  *
- * $table must be the table name (or the alias it's queried under) exactly as
- * it appears in the calling query's FROM/JOIN, since it's used to qualify
- * `visibility`/`owner_user_id` and avoid ambiguity in a joined query.
- *
- * Preparation only, per this task: nothing calls this from an actual query
- * yet — that's separate follow-up work.
+ * $table is always the real table name, validated against
+ * VISIBILITY_SCOPED_TABLES. When the calling query aliases that table
+ * (e.g. `FROM accounts a`), pass the alias separately as $alias — it's
+ * validated against a plain identifier pattern (never embedded unchecked)
+ * and used as the column prefix instead of $table, so the generated
+ * fragment qualifies `visibility`/`owner_user_id` against the name the
+ * query can actually resolve.
  */
-function visibilityScope(string $table): string
+function visibilityScope(string $table, ?string $alias = null): string
 {
     if (!in_array($table, VISIBILITY_SCOPED_TABLES, true)) {
         throw new InvalidArgumentException("visibilityScope(): unrecognized table \"{$table}\"");
     }
+    if ($alias !== null && !preg_match('/^[a-z_][a-z0-9_]{0,15}$/', $alias)) {
+        throw new InvalidArgumentException("visibilityScope(): invalid alias \"{$alias}\"");
+    }
 
     $role = currentRole();
-    if ($role === 'owner' || $role === 'admin') {
+    if ($role === 'owner') {
         return '1=1';
     }
 
+    $prefix = $alias ?? $table;
     $userId = (int) currentUserId();
-    return "({$table}.visibility = 'workspace' OR ({$table}.visibility = 'private' AND {$table}.owner_user_id = {$userId}))";
+    return "({$prefix}.visibility = 'workspace' OR ({$prefix}.visibility = 'private' AND {$prefix}.owner_user_id = {$userId}))";
 }
 
 /**
  * Count of records in $table that are 'private' and not owned by the
  * current user (including a private record with no recorded owner at
  * all) — i.e. exactly what visibilityScope() is hiding from them right
- * now. Always 0 for owner/admin, since nothing is hidden from them.
- * Deliberately returns a bare count only — callers must never surface
- * which records, who owns them, or any other detail alongside it.
+ * now. Always 0 for owner, since nothing is hidden from them. Non-zero for
+ * admin since the DECISION in docs/PERMISSIONS.md: admin does not
+ * automatically see other users' private records either, so the same
+ * "N private records hidden" notice member/viewer already got must keep
+ * showing for admin too. Deliberately returns a bare count only — callers
+ * must never surface which records, who owns them, or any other detail
+ * alongside it.
  */
 function hiddenPrivateRecordsCount(string $table): int
 {
@@ -410,7 +423,7 @@ function hiddenPrivateRecordsCount(string $table): int
     }
 
     $role = currentRole();
-    if ($role === 'owner' || $role === 'admin') {
+    if ($role === 'owner') {
         return 0;
     }
 
@@ -447,17 +460,65 @@ function notFoundResponse(string $message): void
  * rather than filtered in SQL. View/edit pages combine this with a
  * not-found check into one notFoundResponse() so "exists but hidden" and
  * "doesn't exist" are indistinguishable to the caller.
+ *
+ * "see private record" row of docs/PERMISSIONS.md — the source of truth.
+ * DECISION: admin does NOT get an automatic true here (only owner does);
+ * an admin still sees their OWN private record via the ownership check
+ * below, same as a member.
  */
 function canSeeRecord(?string $visibility, ?int $ownerUserId): bool
 {
     $role = currentRole();
-    if ($role === 'owner' || $role === 'admin') {
+    if ($role === 'owner') {
         return true;
     }
     if ($visibility === 'workspace') {
         return true;
     }
     return $ownerUserId !== null && $ownerUserId === currentUserId();
+}
+
+/**
+ * "edit/delete/archive record" row of the permission matrix in
+ * docs/PERMISSIONS.md (the source of truth): owner and admin may write to
+ * any record in the workspace; a member only to a record they own; a
+ * viewer never. Visibility is deliberately NOT a factor here — unlike
+ * canSeeRecord(), a workspace-visible record a member doesn't own is still
+ * off-limits to write, matching the matrix exactly — but the parameter is
+ * kept so every call site can pass the same $row shape it already has for
+ * canSeeRecord()/canManageRecordVisibility() without branching.
+ */
+function canEditRecord(?string $visibility, ?int $ownerUserId): bool
+{
+    $role = currentRole();
+    if ($role === 'owner' || $role === 'admin') {
+        return true;
+    }
+    if ($role === 'member') {
+        return $ownerUserId !== null && $ownerUserId === currentUserId();
+    }
+    return false;
+}
+
+/**
+ * Gate for write endpoints (edit/delete/archive) on a single already-
+ * fetched record — pairs with notFoundResponse() the same way
+ * canSeeRecord() does for reads: check existence/visibility first (a
+ * hidden-or-missing record is a 404, per notFoundResponse()'s own
+ * docblock), THEN call this to gate the write itself. $row is whatever
+ * associative array the caller already fetched (edit.php's SELECT *,
+ * etc.) — only 'visibility' and 'owner_user_id' are read from it. Renders
+ * a 403 (not a redirect, not a 404) via the same rendering requireRole()
+ * uses, since the record's existence and this user's read access are
+ * already established by this point — only the write is being refused.
+ * See docs/PERMISSIONS.md.
+ */
+function requireEditRecord(array $row): void
+{
+    $ownerUserId = isset($row['owner_user_id']) ? (int) $row['owner_user_id'] : null;
+    if (!canEditRecord($row['visibility'] ?? null, $ownerUserId)) {
+        forbiddenResponse();
+    }
 }
 
 /**

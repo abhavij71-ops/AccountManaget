@@ -44,12 +44,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'link_phone') {
         $phoneId = (int) ($_POST['phone_id'] ?? 0);
         if ($phoneId > 0) {
-            $stmt = $pdo->prepare('INSERT OR IGNORE INTO phone_email (phone_id, email_id) VALUES (?, ?)');
-            $stmt->execute([$phoneId, $id]);
-            $ph = $pdo->prepare('SELECT phone_number FROM phones WHERE id = ?');
+            $ph = $pdo->prepare('SELECT phone_number, visibility, owner_user_id FROM phones WHERE id = ?');
             $ph->execute([$phoneId]);
-            log_history($pdo, 'email', $id, 'Phone Linked', null, null, (string) $ph->fetchColumn());
-            flashSet('success', t('common.phone_linked'));
+            $phoneRow = $ph->fetch();
+            // A hidden id posted by hand must not be linkable — the dropdown
+            // below is scoped, but the POST is re-checked here too.
+            if ($phoneRow && canSeeRecord($phoneRow['visibility'] ?? null, isset($phoneRow['owner_user_id']) ? (int) $phoneRow['owner_user_id'] : null)) {
+                $stmt = $pdo->prepare('INSERT OR IGNORE INTO phone_email (phone_id, email_id) VALUES (?, ?)');
+                $stmt->execute([$phoneId, $id]);
+                log_history($pdo, 'email', $id, 'Phone Linked', null, null, (string) $phoneRow['phone_number']);
+                flashSet('success', t('common.phone_linked'));
+            } else {
+                flashSet('danger', t('msg.invalid_request'));
+            }
         }
     } elseif ($action === 'unlink_phone') {
         $phoneId = (int) ($_POST['phone_id'] ?? 0);
@@ -125,7 +132,11 @@ $linkedPhonesStmt->execute([$id]);
 $linkedPhones = $linkedPhonesStmt->fetchAll();
 $linkedPhoneIds = array_column($linkedPhones, 'id');
 
-$availablePhones = $pdo->query('SELECT id, phone_number, label FROM phones ORDER BY phone_number')->fetchAll();
+// Scoped to what the current user may see (docs/PERMISSIONS.md) — this
+// dropdown previously offered every phone in the workspace regardless of
+// visibility, the same "hidden record offered in a select" bug as
+// accounts/add.php.
+$availablePhones = $pdo->query('SELECT id, phone_number, label FROM phones WHERE ' . visibilityScope('phones') . ' ORDER BY phone_number')->fetchAll();
 $availablePhones = array_filter($availablePhones, static fn ($p) => !in_array((int) $p['id'], $linkedPhoneIds, true));
 
 $tags = fetchEntityTags($pdo, 'email', $id);
@@ -148,12 +159,14 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
     <div class="d-flex gap-2">
-        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
-        <form method="post" class="d-inline" data-confirm="<?= e(t('emails.delete_confirm')) ?>">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="action" value="delete">
-            <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
-        </form>
+        <?php if (canEditRecord($email['visibility'] ?? null, isset($email['owner_user_id']) ? (int) $email['owner_user_id'] : null)): ?>
+            <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
+            <form method="post" class="d-inline" data-confirm="<?= e(t('emails.delete_confirm')) ?>">
+                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                <input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
+            </form>
+        <?php endif; ?>
         <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
     </div>
 </div>

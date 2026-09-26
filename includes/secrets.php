@@ -1,8 +1,6 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../config.php';
-
 /**
  * The single place any API key/password in this app is read from — an
  * environment variable first, then a fallback file that lives OUTSIDE the
@@ -14,10 +12,18 @@ require_once __DIR__ . '/../config.php';
  *   return [
  *       'ZARINPAL_MERCHANT_ID' => '...',
  *       'ADMIN_PASSWORD' => '...',
+ *       'DATA_DIR' => '/home/youruser/private-data',
  *   ];
  *
  * kept one directory ABOVE APP_ROOT (config.php) — never inside it, so no
  * web server configuration change could ever make it reachable over HTTP.
+ *
+ * Requires APP_ROOT (config.php) to already be defined. Deliberately does
+ * NOT require_once config.php itself — config.php requires THIS file (to
+ * resolve DATA_DIR through loadSecret() below), so the reverse require
+ * would be circular. Every other caller already requires config.php first
+ * in its own chain, per this app's convention of config.php being the
+ * first require everywhere.
  */
 function loadSecret(string $key): string
 {

@@ -33,25 +33,62 @@ function setAppSetting(string $key, string $value): void
 }
 
 /**
- * AES-256-CBC with a random IV per call, key derived from MAIL_ENCRYPTION_KEY
+ * AES-256-GCM with a random IV per call, key derived from MAIL_ENCRYPTION_KEY
  * (config.php, read from the environment — never hardcoded). Throws rather
  * than falling back to storing plain text if that key isn't configured.
+ *
+ * GCM, not CBC (v1's cipher — see decryptSecret()'s legacy branch below):
+ * CBC has no authentication tag at all, so a modified ciphertext decrypts
+ * to garbage bytes silently instead of being detected. GCM's tag is stored
+ * right alongside the IV/ciphertext and verified on every decrypt.
+ *
+ * The "v2:" prefix is what lets decryptSecret() tell an already-migrated
+ * value apart from a still-base64-only v1 one without guessing.
  */
 function encryptSecret(string $plaintext): string
 {
     $key = mailEncryptionKey();
-    $ivLength = openssl_cipher_iv_length('aes-256-cbc');
+    $ivLength = openssl_cipher_iv_length('aes-256-gcm');
     $iv = random_bytes($ivLength);
-    $ciphertext = openssl_encrypt($plaintext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+    $tag = '';
+    $ciphertext = openssl_encrypt($plaintext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
     if ($ciphertext === false) {
         throw new RuntimeException('Failed to encrypt secret.');
     }
-    return base64_encode($iv . $ciphertext);
+    return 'v2:' . base64_encode($iv . $tag . $ciphertext);
 }
 
+/**
+ * Accepts both formats: "v2:"-prefixed AES-256-GCM (current) and bare
+ * base64 AES-256-CBC (everything encrypted before this change — no prefix
+ * of its own, since it predates there being more than one format at all).
+ * A password saved under v1 keeps working exactly as before; nothing here
+ * upgrades it in place — that only happens the next time settings are
+ * saved (saveSmtpSettings() below), the same as the account already
+ * having to be re-saved for any other setting to take effect.
+ */
 function decryptSecret(string $encoded): string
 {
     $key = mailEncryptionKey();
+
+    if (str_starts_with($encoded, 'v2:')) {
+        $ivLength = openssl_cipher_iv_length('aes-256-gcm');
+        $tagLength = 16;
+        $raw = base64_decode(substr($encoded, 3), true);
+        if ($raw === false || strlen($raw) <= $ivLength + $tagLength) {
+            throw new RuntimeException('Malformed encrypted secret.');
+        }
+        $iv = substr($raw, 0, $ivLength);
+        $tag = substr($raw, $ivLength, $tagLength);
+        $ciphertext = substr($raw, $ivLength + $tagLength);
+        $plaintext = openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        if ($plaintext === false) {
+            throw new RuntimeException('Failed to decrypt secret.');
+        }
+        return $plaintext;
+    }
+
+    // Legacy v1 format (AES-256-CBC, no authentication tag).
     $ivLength = openssl_cipher_iv_length('aes-256-cbc');
     $raw = base64_decode($encoded, true);
     if ($raw === false || strlen($raw) <= $ivLength) {
@@ -95,14 +132,25 @@ function getSmtpSettings(): array
  * $newPassword is null when the caller isn't changing it (leaves the
  * previously stored encrypted password untouched — a blank field on the
  * settings form must never wipe out a working password).
+ *
+ * When no new password is submitted, this is still the opportunity to
+ * upgrade an existing v1 (AES-256-CBC, unauthenticated) secret to the
+ * current v2 (AES-256-GCM) format — decrypt-then-re-encrypt, without
+ * requiring the admin to re-type a password that already works fine.
  */
 function saveSmtpSettings(array $settings, ?string $newPassword): void
 {
     foreach (['smtp_host', 'smtp_port', 'smtp_username', 'smtp_encryption', 'smtp_from_address', 'smtp_from_name'] as $key) {
         setAppSetting($key, (string) ($settings[$key] ?? ''));
     }
+
     if ($newPassword !== null && $newPassword !== '') {
         setAppSetting('smtp_password_encrypted', encryptSecret($newPassword));
+    } else {
+        $existing = getAppSetting('smtp_password_encrypted');
+        if ($existing !== '' && !str_starts_with($existing, 'v2:')) {
+            setAppSetting('smtp_password_encrypted', encryptSecret(decryptSecret($existing)));
+        }
     }
 }
 

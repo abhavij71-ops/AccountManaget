@@ -19,9 +19,16 @@ require_once __DIR__ . '/platform-db.php';
  * a user/workspace that may already be mid-deletion, sometimes gone from
  * the session already by the time this runs).
  *
- * Returns without writing anything if no user can be attributed at all
- * (no explicit $userId and no logged-in session) — matching auditLog()'s
- * old behavior: an audit row nobody can be attributed to isn't useful.
+ * $userId/$workspaceId fall back to the current tenant session ONLY when
+ * currentUserId()/currentWorkspaceId() are actually defined — they live in
+ * includes/auth.php, which the platform admin panel (admin/_guard.php)
+ * deliberately never loads, being a separate, session-key-only identity
+ * with no accounts_users row at all. A platform-admin call site passes
+ * userId: null explicitly and relies on this guard rather than a fatal
+ * "undefined function" — the row is written with a NULL user_id (see
+ * migrations/platform/013_make_audit_log_user_id_nullable.php), and every
+ * such caller puts details['actor'] = 'platform-admin' so the row stays
+ * traceable to who actually did it.
  */
 function logAuditEvent(
     string $action,
@@ -31,11 +38,12 @@ function logAuditEvent(
     ?int $userId = null,
     ?int $workspaceId = null
 ): void {
-    $userId ??= currentUserId();
-    if ($userId === null) {
-        return;
+    if ($userId === null && function_exists('currentUserId')) {
+        $userId = currentUserId();
     }
-    $workspaceId ??= currentWorkspaceId();
+    if ($workspaceId === null && function_exists('currentWorkspaceId')) {
+        $workspaceId = currentWorkspaceId();
+    }
     $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 
     platformDb()->prepare(

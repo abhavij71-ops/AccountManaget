@@ -16,20 +16,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         if ($email !== '') {
-            $stmt = platformDb()->prepare('SELECT id FROM accounts_users WHERE email = ? COLLATE NOCASE AND is_active = 1 LIMIT 1');
-            $stmt->execute([$email]);
-            $userId = $stmt->fetchColumn();
-            if ($userId !== false) {
-                $token = createPasswordReset((int) $userId);
-                $resetUrl = appUrl('reset-password.php?token=' . $token);
-                queueMail(
-                    $email,
-                    t('forgot_password.email_subject'),
-                    '<p>' . e(t('forgot_password.email_intro')) . '</p><p><a href="' . e($resetUrl) . '">' . e($resetUrl) . '</a></p>'
-                );
+            $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+            // Checked and recorded before anything else — a flood must never
+            // queue more mail, regardless of whether the email exists.
+            if (!isPasswordResetRequestLocked($email, $ip)) {
+                recordPasswordResetRequest($email, $ip);
+
+                $stmt = platformDb()->prepare('SELECT id FROM accounts_users WHERE email = ? COLLATE NOCASE AND is_active = 1 LIMIT 1');
+                $stmt->execute([$email]);
+                $userId = $stmt->fetchColumn();
+                if ($userId !== false) {
+                    $token = createPasswordReset((int) $userId);
+                    $resetUrl = appUrl('reset-password.php?token=' . $token);
+                    queueMail(
+                        $email,
+                        t('forgot_password.email_subject'),
+                        '<p>' . e(t('forgot_password.email_intro')) . '</p><p><a href="' . e($resetUrl) . '">' . e($resetUrl) . '</a></p>'
+                    );
+                }
             }
-            // Same response whether or not that email exists or is active —
-            // this form must never reveal which emails are registered.
+            // Same response whether or not that email exists, is active, or
+            // was just throttled — this form must never reveal any of that.
         }
         $submitted = true;
     }

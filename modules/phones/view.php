@@ -106,12 +106,14 @@ require __DIR__ . '/../../includes/header.php';
         </div>
     </div>
     <div class="d-flex gap-2">
-        <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
-        <form method="post" class="d-inline" data-confirm="<?= e(t('phones.delete_confirm')) ?>">
-            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-            <input type="hidden" name="action" value="delete">
-            <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
-        </form>
+        <?php if (canEditRecord($phone['visibility'] ?? null, isset($phone['owner_user_id']) ? (int) $phone['owner_user_id'] : null)): ?>
+            <a href="edit.php?id=<?= (int) $id ?>" class="btn btn-primary btn-sm"><?= e(t('common.edit')) ?></a>
+            <form method="post" class="d-inline" data-confirm="<?= e(t('phones.delete_confirm')) ?>">
+                <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                <input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('common.delete')) ?></button>
+            </form>
+        <?php endif; ?>
         <a href="index.php" class="btn btn-outline-secondary btn-sm"><?= e(t('common.back_to_list')) ?></a>
     </div>
 </div>

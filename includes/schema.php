@@ -12,6 +12,17 @@ declare(strict_types=1);
 function installSchemaStatements(): array
 {
     return [
+        // emails/services/phones/accounts below carry owner_user_id/visibility
+        // directly (they didn't before) so the new idx_*_visibility_owner
+        // indexes — added alongside them, for visibilityScope()'s (includes/
+        // helpers.php) WHERE clause on every list/search/export query — can be
+        // created in the same applyCoreSchema() pass a fresh workspace runs,
+        // rather than only after migrations/007_add_visibility_columns.php
+        // (which still exists, unchanged, for a workspace database created
+        // before this: it rebuilds the table only when owner_user_id is
+        // missing, so it's a safe no-op here since a table created by the
+        // statements below already has both columns from the start).
+
         // No `users` table here anymore — it was the legacy single-tenant
         // admin table, dead weight on every v2 workspace (nothing ever
         // wrote to it; log_history() has always recorded the PLATFORM
@@ -32,8 +43,11 @@ function installSchemaStatements(): array
             notes TEXT,
             is_archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
-            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
+            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            owner_user_id INTEGER,
+            visibility TEXT NOT NULL DEFAULT \'workspace\' CHECK (visibility IN (\'private\',\'workspace\'))
         )',
+        'CREATE INDEX IF NOT EXISTS idx_phones_visibility_owner ON phones(visibility, owner_user_id)',
 
         'CREATE TABLE IF NOT EXISTS phone_security (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,11 +76,14 @@ function installSchemaStatements(): array
             is_favorite INTEGER NOT NULL DEFAULT 0,
             is_archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
-            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
+            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            owner_user_id INTEGER,
+            visibility TEXT NOT NULL DEFAULT \'workspace\' CHECK (visibility IN (\'private\',\'workspace\'))
         )',
         'CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status)',
         'CREATE INDEX IF NOT EXISTS idx_emails_type ON emails(type)',
         'CREATE INDEX IF NOT EXISTS idx_emails_favorite ON emails(is_favorite)',
+        'CREATE INDEX IF NOT EXISTS idx_emails_visibility_owner ON emails(visibility, owner_user_id)',
 
         'CREATE TABLE IF NOT EXISTS email_security (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,10 +118,13 @@ function installSchemaStatements(): array
             notes TEXT,
             is_archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
-            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\'))
+            updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            owner_user_id INTEGER,
+            visibility TEXT NOT NULL DEFAULT \'workspace\' CHECK (visibility IN (\'private\',\'workspace\'))
         )',
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_services_name_unique ON services(service_name COLLATE NOCASE)',
         'CREATE INDEX IF NOT EXISTS idx_services_category ON services(category)',
+        'CREATE INDEX IF NOT EXISTS idx_services_visibility_owner ON services(visibility, owner_user_id)',
 
         'CREATE TABLE IF NOT EXISTS service_defaults (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -145,6 +165,8 @@ function installSchemaStatements(): array
             is_archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
             updated_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            owner_user_id INTEGER,
+            visibility TEXT NOT NULL DEFAULT \'workspace\' CHECK (visibility IN (\'private\',\'workspace\')),
             CHECK (
                 (identity_type = \'email\'    AND email_id IS NOT NULL) OR
                 (identity_type = \'phone\'    AND identity_phone_id IS NOT NULL) OR
@@ -156,6 +178,7 @@ function installSchemaStatements(): array
         'CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email_id)',
         'CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(status)',
         'CREATE INDEX IF NOT EXISTS idx_accounts_identity_phone ON accounts(identity_phone_id)',
+        'CREATE INDEX IF NOT EXISTS idx_accounts_visibility_owner ON accounts(visibility, owner_user_id)',
 
         'CREATE TABLE IF NOT EXISTS account_security (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
