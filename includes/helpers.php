@@ -3,6 +3,24 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/lang.php';
 
+/**
+ * The one function for any timestamp that is stored in or compared against
+ * a datetime('now') column. SQLite's datetime('now') is always UTC; PHP's
+ * date()/time() follow config.php's Asia/Tehran (UTC+3:30) local timezone.
+ * Mixing the two silently shifts every boundary by 3h30m (VERIFIED: a login
+ * lockout window and password-reset request cap that never triggered
+ * because "15 minutes ago" was computed hours in the future relative to the
+ * stored UTC rows). gmdate(), not date() — the point is to bypass the
+ * configured timezone, not reformat within it. Never use this for a
+ * date-only value the user typed (renewal dates, created_date) or for
+ * display — only for a timestamp headed into, or compared against, the
+ * database.
+ */
+function dbNow(string $modifier = 'now'): string
+{
+    return gmdate('Y-m-d H:i:s', strtotime($modifier));
+}
+
 const EMAIL_TYPES = [
     'Personal' => 'شخصی',
     'Work' => 'کاری',

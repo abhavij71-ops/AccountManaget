@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/platform-db.php';
+require_once __DIR__ . '/helpers.php';
 
 const LOGIN_LOCKOUT_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_WINDOW_MINUTES = 15;
@@ -26,7 +27,7 @@ const LOGIN_ATTEMPTS_RETENTION_HOURS = 24;
  */
 function isLoginLocked(string $ip, string $username): bool
 {
-    $since = date('Y-m-d H:i:s', strtotime('-' . LOGIN_LOCKOUT_WINDOW_MINUTES . ' minutes'));
+    $since = dbNow('-' . LOGIN_LOCKOUT_WINDOW_MINUTES . ' minutes');
 
     $ipStmt = platformDb()->prepare(
         'SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND success = 0 AND attempted_at >= ?'
@@ -53,7 +54,7 @@ function recordLoginAttempt(string $ip, string $username, bool $success): void
 {
     $platform = platformDb();
 
-    $cutoff = date('Y-m-d H:i:s', strtotime('-' . LOGIN_ATTEMPTS_RETENTION_HOURS . ' hours'));
+    $cutoff = dbNow('-' . LOGIN_ATTEMPTS_RETENTION_HOURS . ' hours');
     $platform->prepare('DELETE FROM login_attempts WHERE attempted_at < ?')->execute([$cutoff]);
 
     $platform->prepare('INSERT INTO login_attempts (ip, username, success) VALUES (?, ?, ?)')

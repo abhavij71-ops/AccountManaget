@@ -22,6 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    requireEditRecord($account);
+
     $action = (string) ($_POST['action'] ?? '');
 
     if ($action === 'verify') {
@@ -126,16 +128,28 @@ $recovery = fetchAccountRecovery($pdo, $id);
 $completeness = calcAccountCompleteness($account, $security, $recovery);
 
 $recoveryEmail = null;
+$recoveryEmailHidden = false;
 if (!empty($recovery['recovery_email_id'])) {
-    $stmt = $pdo->prepare('SELECT id, email_address FROM emails WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT id, email_address, visibility, owner_user_id FROM emails WHERE id = ?');
     $stmt->execute([$recovery['recovery_email_id']]);
-    $recoveryEmail = $stmt->fetch() ?: null;
+    $recoveryEmailRow = $stmt->fetch() ?: null;
+    if ($recoveryEmailRow && canSeeRecord($recoveryEmailRow['visibility'] ?? null, isset($recoveryEmailRow['owner_user_id']) ? (int) $recoveryEmailRow['owner_user_id'] : null)) {
+        $recoveryEmail = $recoveryEmailRow;
+    } elseif ($recoveryEmailRow) {
+        $recoveryEmailHidden = true;
+    }
 }
 $recoveryPhone = null;
+$recoveryPhoneHidden = false;
 if (!empty($recovery['recovery_phone_id'])) {
-    $stmt = $pdo->prepare('SELECT id, phone_number FROM phones WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT id, phone_number, visibility, owner_user_id FROM phones WHERE id = ?');
     $stmt->execute([$recovery['recovery_phone_id']]);
-    $recoveryPhone = $stmt->fetch() ?: null;
+    $recoveryPhoneRow = $stmt->fetch() ?: null;
+    if ($recoveryPhoneRow && canSeeRecord($recoveryPhoneRow['visibility'] ?? null, isset($recoveryPhoneRow['owner_user_id']) ? (int) $recoveryPhoneRow['owner_user_id'] : null)) {
+        $recoveryPhone = $recoveryPhoneRow;
+    } elseif ($recoveryPhoneRow) {
+        $recoveryPhoneHidden = true;
+    }
 }
 
 $identityType = $account['identity_type'] ?? 'email';
@@ -159,7 +173,7 @@ $tags = fetchEntityTags($pdo, 'account', $id);
 $allTagNames = $pdo->query('SELECT name FROM tags ORDER BY name')->fetchAll(PDO::FETCH_COLUMN);
 
 $stmt = $pdo->prepare('SELECT p.id, p.phone_number, p.label FROM phones p
-    JOIN phone_account pa ON pa.phone_id = p.id WHERE pa.account_id = ? ORDER BY p.phone_number');
+    JOIN phone_account pa ON pa.phone_id = p.id WHERE pa.account_id = ? AND ' . visibilityScope('phones', 'p') . ' ORDER BY p.phone_number');
 $stmt->execute([$id]);
 $linkedPhones = $stmt->fetchAll();
 $linkedPhoneIds = array_column($linkedPhones, 'id');
@@ -306,9 +320,9 @@ require __DIR__ . '/../../includes/header.php';
                 <dl class="row mb-0">
                     <dt class="col-6"><?= e(t('accounts.field_recovery_status')) ?></dt><dd class="col-6"><?= renderBadge($recovery['status'] ?? null, RECOVERY_STATUSES) ?></dd>
                     <dt class="col-6"><?= e(t('field.recovery_email')) ?></dt>
-                    <dd class="col-6"><?= $recoveryEmail ? '<a href="../emails/view.php?id=' . (int) $recoveryEmail['id'] . '">' . e($recoveryEmail['email_address']) . '</a>' : dashOrValue(null) ?></dd>
+                    <dd class="col-6"><?= $recoveryEmail ? '<a href="../emails/view.php?id=' . (int) $recoveryEmail['id'] . '">' . e($recoveryEmail['email_address']) . '</a>' : ($recoveryEmailHidden ? '<span class="text-muted fst-italic">(private record)</span>' : dashOrValue(null)) ?></dd>
                     <dt class="col-6"><?= e(t('emails.recovery_phone_label')) ?></dt>
-                    <dd class="col-6"><?= $recoveryPhone ? '<a href="../phones/view.php?id=' . (int) $recoveryPhone['id'] . '">' . e($recoveryPhone['phone_number']) . '</a>' : dashOrValue(null) ?></dd>
+                    <dd class="col-6"><?= $recoveryPhone ? '<a href="../phones/view.php?id=' . (int) $recoveryPhone['id'] . '">' . e($recoveryPhone['phone_number']) . '</a>' : ($recoveryPhoneHidden ? '<span class="text-muted fst-italic">(private record)</span>' : dashOrValue(null)) ?></dd>
                     <dt class="col-6"><?= e(t('accounts.view_recovery_contact')) ?></dt><dd class="col-6"><?= dashOrValue($recovery['recovery_contact'] ?? null) ?></dd>
                     <dt class="col-6"><?= e(t('field.recovery_codes_status')) ?></dt><dd class="col-6"><?= renderBadge($recovery['recovery_codes_status'] ?? null, SECURITY_STATES) ?></dd>
                     <dt class="col-6"><?= e(t('field.recovery_codes_reference')) ?></dt><dd class="col-6"><?= dashOrValue($recovery['recovery_codes_reference'] ?? null) ?></dd>

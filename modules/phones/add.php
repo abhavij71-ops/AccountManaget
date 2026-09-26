@@ -16,6 +16,7 @@ $form = [
     'status' => 'Unknown',
     'is_primary' => '',
     'notes' => '',
+    'visibility' => 'workspace',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -24,12 +25,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
-        if ($key === 'is_primary') {
+        if ($key === 'is_primary' || $key === 'visibility') {
             continue;
         }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
     $form['is_primary'] = isset($_POST['is_primary']) ? '1' : '';
+    $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+    $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : 'workspace';
 
     if ($form['phone_number'] === '') {
         $errors[] = t('phones.number_required');
@@ -42,8 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO phones (phone_number, country, label, status, is_primary, notes, owner_user_id)
-                VALUES (:phone_number, :country, :label, :status, :is_primary, :notes, :owner_user_id)');
+            $stmt = $pdo->prepare('INSERT INTO phones (phone_number, country, label, status, is_primary, notes, visibility, owner_user_id)
+                VALUES (:phone_number, :country, :label, :status, :is_primary, :notes, :visibility, :owner_user_id)');
             $stmt->execute([
                 'phone_number' => $form['phone_number'],
                 'country' => $form['country'] !== '' ? $form['country'] : null,
@@ -51,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $form['status'],
                 'is_primary' => $form['is_primary'] === '1' ? 1 : 0,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'owner_user_id' => currentUserId(),
             ]);
             $newId = (int) $pdo->lastInsertId();
@@ -115,6 +119,14 @@ require __DIR__ . '/../../includes/header.php';
                     <input type="checkbox" name="is_primary" id="is_primary" class="form-check-input" value="1" <?= $form['is_primary'] === '1' ? 'checked' : '' ?>>
                     <label for="is_primary" class="form-check-label"><?= e(t('phones.field_is_primary')) ?></label>
                 </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                <select name="visibility" class="form-select">
+                    <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                    <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                </select>
+                <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
             </div>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>

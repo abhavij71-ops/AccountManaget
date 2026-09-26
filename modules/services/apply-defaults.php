@@ -77,14 +77,32 @@ function planServiceDefaultsApply(PDO $pdo, int $serviceId, array $defaults): ar
     $isEmpty = static fn ($current) => $current === null || trim((string) $current) === '';
 
     $stmt = $pdo->prepare("SELECT a.id, a.identity_type, a.email_id, a.identity_phone_id, a.username,
+            a.visibility, a.owner_user_id,
             e.email_address, p.phone_number
         FROM accounts a
         LEFT JOIN emails e ON e.id = a.email_id
         LEFT JOIN phones p ON p.id = a.identity_phone_id
-        WHERE a.service_id = ? AND a.is_archived = 0
+        WHERE a.service_id = ? AND a.is_archived = 0 AND " . visibilityScope('accounts', 'a') . "
         ORDER BY COALESCE(e.email_address, p.phone_number, a.username, '')");
     $stmt->execute([$serviceId]);
-    $accounts = $stmt->fetchAll();
+    $visibleAccounts = $stmt->fetchAll();
+
+    // Visible (per visibilityScope() above) is not the same as editable:
+    // canEditRecord() also excludes a workspace-visible account a member
+    // doesn't own (docs/PERMISSIONS.md). VERIFIED: a member could apply
+    // defaults into accounts owned by the owner because this function never
+    // checked either. Only the count is ever surfaced below — never which
+    // accounts — so this can't be used to fish for another user's private
+    // account usernames the way "SECRET-owner-acct" leaked in the preview.
+    $accounts = [];
+    $skippedForPermission = 0;
+    foreach ($visibleAccounts as $account) {
+        if (canEditRecord($account['visibility'] ?? null, isset($account['owner_user_id']) ? (int) $account['owner_user_id'] : null)) {
+            $accounts[] = $account;
+        } else {
+            $skippedForPermission++;
+        }
+    }
 
     $fieldTally = [];
     $tally = static function (string $field, bool $filled) use (&$fieldTally): void {
@@ -223,9 +241,10 @@ function planServiceDefaultsApply(PDO $pdo, int $serviceId, array $defaults): ar
     }
 
     return [
-        'total_accounts' => count($accounts),
+        'total_accounts' => count($visibleAccounts),
         'field_tally' => $fieldTally,
         'plans' => $plans,
+        'skipped_for_permission' => $skippedForPermission,
     ];
 }
 
@@ -257,7 +276,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $result = planServiceDefaultsApply($pdo, $id, $defaults);
 
     if (!$result['plans']) {
-        flashSet('success', t('services.apply_defaults_nothing_message'));
+        $nothingMessage = t('services.apply_defaults_nothing_message');
+        if ($result['skipped_for_permission'] > 0) {
+            $nothingMessage .= ' ' . $result['skipped_for_permission'] . ' ' . tOr('services.apply_defaults_skipped_permission', "account(s) skipped — you don't have permission to edit them.");
+        }
+        flashSet('success', $nothingMessage);
         header('Location: view.php?id=' . $id);
         exit;
     }
@@ -283,7 +306,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $pdo->commit();
-        flashSet('success', t('services.apply_defaults_success', ['accounts' => $accountsAffected, 'fields' => $fieldsFilled]));
+        $successMessage = t('services.apply_defaults_success', ['accounts' => $accountsAffected, 'fields' => $fieldsFilled]);
+        if ($result['skipped_for_permission'] > 0) {
+            $successMessage .= ' ' . $result['skipped_for_permission'] . ' ' . tOr('services.apply_defaults_skipped_permission', "account(s) skipped — you don't have permission to edit them.");
+        }
+        flashSet('success', $successMessage);
         header('Location: view.php?id=' . $id);
         exit;
     } catch (Throwable $e) {
@@ -308,6 +335,10 @@ require __DIR__ . '/../../includes/header.php';
 
 <p class="text-muted"><?= e(t('services.apply_defaults_intro')) ?></p>
 <p><?= e(t('services.apply_defaults_account_count', ['count' => $result['total_accounts']])) ?></p>
+
+<?php if ($result['skipped_for_permission'] > 0): ?>
+    <p class="text-muted small"><?= (int) $result['skipped_for_permission'] ?> <?= e(tOr('services.apply_defaults_skipped_permission', "account(s) skipped — you don't have permission to edit them.")) ?></p>
+<?php endif; ?>
 
 <?php if (!$result['plans']): ?>
     <div class="alert alert-info">

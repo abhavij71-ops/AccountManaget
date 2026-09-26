@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ->execute([$workspaceId, $email]);
 
                 $token = bin2hex(random_bytes(32));
-                $expiresAt = date('Y-m-d H:i:s', strtotime('+7 days'));
+                $expiresAt = dbNow('+7 days');
                 $platform->prepare(
                     'INSERT INTO invitations (workspace_id, email, role, token_hash, expires_at, invited_by)
                      VALUES (?, ?, ?, ?, ?, ?)'
@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flashSet('danger', t('msg.invalid_request'));
         } else {
             $token = bin2hex(random_bytes(32));
-            $expiresAt = date('Y-m-d H:i:s', strtotime('+7 days'));
+            $expiresAt = dbNow('+7 days');
             $platform->prepare('UPDATE invitations SET token_hash = ?, expires_at = ? WHERE id = ?')
                 ->execute([hash('sha256', $token), $expiresAt, $invitationId]);
 

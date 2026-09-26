@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/platform-db.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/helpers.php';
 
 const PASSWORD_RESET_TTL_HOURS = 2;
 
@@ -22,7 +23,7 @@ const PASSWORD_RESET_REQUEST_WINDOW_HOURS = 1;
  */
 function isPasswordResetRequestLocked(string $email, string $ip): bool
 {
-    $since = date('Y-m-d H:i:s', strtotime('-' . PASSWORD_RESET_REQUEST_WINDOW_HOURS . ' hours'));
+    $since = dbNow('-' . PASSWORD_RESET_REQUEST_WINDOW_HOURS . ' hours');
     $platform = platformDb();
 
     $emailStmt = $platform->prepare(
@@ -52,7 +53,7 @@ function isPasswordResetRequestLocked(string $email, string $ip): bool
 function recordPasswordResetRequest(string $email, string $ip): void
 {
     $platform = platformDb();
-    $cutoff = date('Y-m-d H:i:s', strtotime('-' . PASSWORD_RESET_REQUEST_WINDOW_HOURS . ' hours'));
+    $cutoff = dbNow('-' . PASSWORD_RESET_REQUEST_WINDOW_HOURS . ' hours');
     $platform->prepare('DELETE FROM password_reset_requests WHERE requested_at < ?')->execute([$cutoff]);
     $platform->prepare('INSERT INTO password_reset_requests (email, ip) VALUES (?, ?)')->execute([$email, $ip]);
 }
@@ -68,7 +69,7 @@ function createPasswordReset(int $userId): string
     $platform->prepare('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL')->execute([$userId]);
 
     $token = bin2hex(random_bytes(32));
-    $expiresAt = date('Y-m-d H:i:s', strtotime('+' . PASSWORD_RESET_TTL_HOURS . ' hours'));
+    $expiresAt = dbNow('+' . PASSWORD_RESET_TTL_HOURS . ' hours');
     $platform->prepare('INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
         ->execute([$userId, hash('sha256', $token), $expiresAt]);
 

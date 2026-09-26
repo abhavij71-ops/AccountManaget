@@ -29,6 +29,7 @@ $form = [
     'default_subscription_status' => '',
     'default_billing_cycle' => '',
     'default_currency' => '',
+    'visibility' => 'workspace',
 ];
 
 $categories = $pdo->query("SELECT DISTINCT category FROM services WHERE category != 'Not Set' ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
@@ -39,12 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
-        if ($key === 'recovery_follows_identity') {
+        if ($key === 'recovery_follows_identity' || $key === 'visibility') {
             continue;
         }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
     $form['recovery_follows_identity'] = isset($_POST['recovery_follows_identity']) ? '1' : '';
+    $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+    $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : 'workspace';
 
     if ($form['service_name'] === '') {
         $errors[] = t('services.name_required');
@@ -81,8 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO services (service_name, website, login_url, category, status, purpose, notes, owner_user_id)
-                VALUES (:service_name, :website, :login_url, :category, :status, :purpose, :notes, :owner_user_id)');
+            $stmt = $pdo->prepare('INSERT INTO services (service_name, website, login_url, category, status, purpose, notes, visibility, owner_user_id)
+                VALUES (:service_name, :website, :login_url, :category, :status, :purpose, :notes, :visibility, :owner_user_id)');
             $stmt->execute([
                 'service_name' => $form['service_name'],
                 'website' => $form['website'] !== '' ? $form['website'] : null,
@@ -91,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status' => $form['status'],
                 'purpose' => $form['purpose'] !== '' ? $form['purpose'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'owner_user_id' => currentUserId(),
             ]);
             $newId = (int) $pdo->lastInsertId();
@@ -174,6 +178,14 @@ require __DIR__ . '/../../includes/header.php';
             <div class="col-md-8">
                 <label class="form-label"><?= e(t('services.field_purpose')) ?></label>
                 <input type="text" name="purpose" class="form-control" value="<?= e($form['purpose']) ?>">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                <select name="visibility" class="form-select">
+                    <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                    <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                </select>
+                <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
             </div>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>

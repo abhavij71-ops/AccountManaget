@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/import.php';
 
 requireLogin();
+requireRole('owner', 'admin');
 
 $importState = $_SESSION['import'] ?? null;
 if (!$importState || !is_file($importState['file_path'])) {

@@ -21,6 +21,7 @@ $form = [
     'status' => 'Active',
     'plan' => '',
     'notes' => '',
+    'visibility' => 'workspace',
 ];
 
 // Scoped to what the current user may see (docs/PERMISSIONS.md) — see
@@ -35,8 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
+        if ($key === 'visibility') {
+            continue;
+        }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
+    $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+    $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : 'workspace';
 
     $serviceId = (int) $form['service_id'];
     $emailId = (int) $form['email_id'];
@@ -78,8 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, identity_value, username, status, notes, owner_user_id)
-                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :status, :notes, :owner_user_id)');
+            $stmt = $pdo->prepare('INSERT INTO accounts (service_id, email_id, identity_type, identity_phone_id, identity_value, username, status, notes, visibility, owner_user_id)
+                VALUES (:service_id, :email_id, :identity_type, :identity_phone_id, :identity_value, :username, :status, :notes, :visibility, :owner_user_id)');
             $stmt->execute([
                 'service_id' => $serviceId,
                 'email_id' => $emailId !== 0 ? $emailId : null,
@@ -89,6 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'username' => $form['username'] !== '' ? $form['username'] : null,
                 'status' => $form['status'],
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'owner_user_id' => currentUserId(),
             ]);
             $accountId = (int) $pdo->lastInsertId();
@@ -220,6 +227,14 @@ require __DIR__ . '/../../includes/header.php';
             <div class="col-md-3">
                 <label class="form-label"><?= e(t('accounts.field_plan')) ?></label>
                 <input type="text" name="plan" class="form-control" value="<?= e($form['plan']) ?>" placeholder="<?= e(t('accounts.quick_plan_placeholder')) ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                <select name="visibility" class="form-select">
+                    <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                    <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                </select>
+                <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
             </div>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>

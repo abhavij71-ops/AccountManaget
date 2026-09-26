@@ -25,6 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    requireEditRecord($phone);
+
     $action = (string) ($_POST['action'] ?? '');
 
     if ($action === 'add_tag') {
@@ -71,24 +73,24 @@ $historyRows = $stmt->fetchAll();
 $csrf = csrfToken();
 
 $stmt = $pdo->prepare('SELECT e.id, e.email_address FROM emails e
-    JOIN phone_email pe ON pe.email_id = e.id WHERE pe.phone_id = ? ORDER BY e.email_address');
+    JOIN phone_email pe ON pe.email_id = e.id WHERE pe.phone_id = ? AND ' . visibilityScope('emails', 'e') . ' ORDER BY e.email_address');
 $stmt->execute([$id]);
 $linkedEmails = $stmt->fetchAll();
 
 $stmt = $pdo->prepare("SELECT e.id, e.email_address FROM emails e
-    JOIN email_security es ON es.email_id = e.id WHERE es.recovery_phone_id = ? ORDER BY e.email_address");
+    JOIN email_security es ON es.email_id = e.id WHERE es.recovery_phone_id = ? AND " . visibilityScope('emails', 'e') . " ORDER BY e.email_address");
 $stmt->execute([$id]);
 $recoveryForEmails = $stmt->fetchAll();
 
 $stmt = $pdo->prepare('SELECT a.id, a.username, a.status, s.id AS service_id, s.service_name FROM accounts a
     JOIN services s ON s.id = a.service_id
-    JOIN phone_account pa ON pa.account_id = a.id WHERE pa.phone_id = ? ORDER BY s.service_name');
+    JOIN phone_account pa ON pa.account_id = a.id WHERE pa.phone_id = ? AND ' . visibilityScope('accounts', 'a') . ' ORDER BY s.service_name');
 $stmt->execute([$id]);
 $linkedAccounts = $stmt->fetchAll();
 
 $stmt = $pdo->prepare('SELECT a.id, a.username, a.status, s.id AS service_id, s.service_name FROM accounts a
     JOIN services s ON s.id = a.service_id
-    WHERE a.identity_phone_id = ? ORDER BY s.service_name');
+    WHERE a.identity_phone_id = ? AND ' . visibilityScope('accounts', 'a') . ' ORDER BY s.service_name');
 $stmt->execute([$id]);
 $identityAccounts = $stmt->fetchAll();
 

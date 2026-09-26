@@ -5,6 +5,7 @@ require_once __DIR__ . '/platform-db.php';
 require_once __DIR__ . '/workspaces.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/plans.php';
+require_once __DIR__ . '/helpers.php';
 
 const EMAIL_VERIFICATION_TTL_HOURS = 24;
 
@@ -22,7 +23,7 @@ function registerPendingUser(string $email, string $password, string $fullName, 
     $userId = (int) $platform->lastInsertId();
 
     $token = bin2hex(random_bytes(32));
-    $expiresAt = date('Y-m-d H:i:s', strtotime('+' . EMAIL_VERIFICATION_TTL_HOURS . ' hours'));
+    $expiresAt = dbNow('+' . EMAIL_VERIFICATION_TTL_HOURS . ' hours');
     $platform->prepare(
         'INSERT INTO email_verifications (user_id, token_hash, workspace_name, expires_at) VALUES (?, ?, ?, ?)'
     )->execute([$userId, hash('sha256', $token), $workspaceName, $expiresAt]);

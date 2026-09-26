@@ -19,12 +19,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
     $accountId = (int) ($_POST['account_id'] ?? 0);
 
-    if ($action === 'mark_still_using' && $accountId > 0) {
-        $pdo->prepare("UPDATE accounts SET last_login = datetime('now') WHERE id = ?")->execute([$accountId]);
-    } elseif ($action === 'mark_cancelled' && $accountId > 0) {
-        $subscriptionId = (int) ($_POST['subscription_id'] ?? 0);
-        $pdo->prepare("UPDATE subscriptions SET status = 'Cancelled' WHERE id = ? AND account_id = ?")
-            ->execute([$subscriptionId, $accountId]);
+    if (($action === 'mark_still_using' || $action === 'mark_cancelled') && $accountId > 0) {
+        $accountStmt = $pdo->prepare('SELECT id, visibility, owner_user_id FROM accounts WHERE id = ?');
+        $accountStmt->execute([$accountId]);
+        $account = $accountStmt->fetch();
+
+        // Same 404-for-hidden, 403-for-visible-but-not-editable gate as
+        // modules/accounts/view.php's own POST actions. VERIFIED: a viewer
+        // could mark the owner's private paid account Cancelled, or bump
+        // its last_login, because this handler previously checked only CSRF.
+        if (!$account || !canSeeRecord($account['visibility'] ?? null, isset($account['owner_user_id']) ? (int) $account['owner_user_id'] : null)) {
+            notFoundResponse(t('accounts.not_found'));
+        }
+        requireEditRecord($account);
+
+        if ($action === 'mark_still_using') {
+            $pdo->prepare("UPDATE accounts SET last_login = datetime('now') WHERE id = ?")->execute([$accountId]);
+        } else {
+            $subscriptionId = (int) ($_POST['subscription_id'] ?? 0);
+            $pdo->prepare("UPDATE subscriptions SET status = 'Cancelled' WHERE id = ? AND account_id = ?")
+                ->execute([$subscriptionId, $accountId]);
+        }
     }
 
     header('Location: costs.php');
@@ -134,19 +149,21 @@ require __DIR__ . '/../../includes/header.php';
                                 <?php endif; ?>
                             </td>
                             <td class="text-end text-nowrap">
-                                <form method="post" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-                                    <input type="hidden" name="action" value="mark_still_using">
-                                    <input type="hidden" name="account_id" value="<?= (int) $row['account_id'] ?>">
-                                    <button type="submit" class="btn btn-outline-success btn-sm"><?= e(t('accounts.still_using_it')) ?></button>
-                                </form>
-                                <form method="post" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
-                                    <input type="hidden" name="action" value="mark_cancelled">
-                                    <input type="hidden" name="account_id" value="<?= (int) $row['account_id'] ?>">
-                                    <input type="hidden" name="subscription_id" value="<?= (int) $row['subscription_id'] ?>">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('accounts.i_cancelled_it')) ?></button>
-                                </form>
+                                <?php if (canEditRecord($row['visibility'] ?? null, isset($row['owner_user_id']) ? (int) $row['owner_user_id'] : null)): ?>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                                        <input type="hidden" name="action" value="mark_still_using">
+                                        <input type="hidden" name="account_id" value="<?= (int) $row['account_id'] ?>">
+                                        <button type="submit" class="btn btn-outline-success btn-sm"><?= e(t('accounts.still_using_it')) ?></button>
+                                    </form>
+                                    <form method="post" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+                                        <input type="hidden" name="action" value="mark_cancelled">
+                                        <input type="hidden" name="account_id" value="<?= (int) $row['account_id'] ?>">
+                                        <input type="hidden" name="subscription_id" value="<?= (int) $row['subscription_id'] ?>">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(t('accounts.i_cancelled_it')) ?></button>
+                                    </form>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>

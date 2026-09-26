@@ -5,7 +5,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/modules/accounts/_lib.php';
 
-requireRole('owner', 'admin');
+requireRole('owner');
 
 $pdo = db();
 $platform = platformDb();
@@ -186,7 +186,7 @@ if ($selectedMember !== null) {
         $pdo->prepare('INSERT INTO offboarding_processes (user_id, started_by) VALUES (?, ?)')
             ->execute([$selectedUserId, currentUserId()]);
         $processId = (int) $pdo->lastInsertId();
-        $startedAt = date('Y-m-d H:i:s');
+        $startedAt = dbNow();
     } else {
         $processId = (int) $process['id'];
         $startedAt = $process['started_at'];

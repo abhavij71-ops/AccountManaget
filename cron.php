@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/secrets.php';
 require_once __DIR__ . '/includes/platform-db.php';
+require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/renewals.php';
 require_once __DIR__ . '/includes/security-score.php';
 require_once __DIR__ . '/includes/mail.php';
@@ -240,7 +241,7 @@ $platform->exec("CREATE TABLE IF NOT EXISTS cron_runs (
 )");
 
 $platform->prepare('INSERT INTO cron_runs (started_at, triggered_by) VALUES (?, ?)')
-    ->execute([date('Y-m-d H:i:s'), $isCli ? 'cli' : 'http']);
+    ->execute([dbNow(), $isCli ? 'cli' : 'http']);
 $runId = (int) $platform->lastInsertId();
 
 $report = [];
@@ -263,7 +264,7 @@ cronStep($report, $hadFailure, 'renewals', function () use ($workspaceFiles, $pl
         if ($pdo === null) {
             continue;
         }
-        $renewals = fetchRenewals($pdo, 30);
+        $renewals = fetchRenewals($pdo, 30, false);
         $notified += notifyRenewalsForWorkspace($platform, basename($file, '.sqlite'), $renewals);
         $checked++;
         $pdo = null;
@@ -299,13 +300,13 @@ cronStep($report, $hadFailure, 'purge', function () use ($platform) {
 
     if (tableExists($platform, 'sessions')) {
         $stmt = $platform->prepare('DELETE FROM sessions WHERE last_seen_at < ?');
-        $stmt->execute([date('Y-m-d H:i:s', time() - SESSION_LIFETIME)]);
+        $stmt->execute([dbNow('-' . SESSION_LIFETIME . ' seconds')]);
         $purgedSessions = $stmt->rowCount();
     }
 
     if (tableExists($platform, 'login_attempts')) {
         $stmt = $platform->prepare('DELETE FROM login_attempts WHERE attempted_at < ?');
-        $stmt->execute([date('Y-m-d H:i:s', strtotime('-90 days'))]);
+        $stmt->execute([dbNow('-90 days')]);
         $purgedAttempts = $stmt->rowCount();
     }
 
@@ -353,7 +354,7 @@ cronStep($report, $hadFailure, 'backup', function () use ($workspaceFiles) {
 
 $status = $hadFailure ? 'partial' : 'success';
 $platform->prepare('UPDATE cron_runs SET finished_at = ?, status = ?, summary = ? WHERE id = ?')
-    ->execute([date('Y-m-d H:i:s'), $status, json_encode($report), $runId]);
+    ->execute([dbNow(), $status, json_encode($report), $runId]);
 
 foreach ($report as $label => $result) {
     echo ($result['ok'] ? 'OK   ' : 'FAIL ') . str_pad($label, 18) . $result['detail'] . "\n";

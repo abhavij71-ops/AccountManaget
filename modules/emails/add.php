@@ -32,6 +32,7 @@ $form = [
     'recovery_codes_reference' => '',
     'backup_method' => '',
     'last_recovery_verification' => '',
+    'visibility' => 'workspace',
 ];
 
 $otherEmails = $pdo->query('SELECT id, email_address FROM emails ORDER BY email_address')->fetchAll();
@@ -43,8 +44,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($form) as $key) {
+        if ($key === 'visibility') {
+            continue;
+        }
         $form[$key] = trim((string) ($_POST[$key] ?? ''));
     }
+    $postedVisibility = (string) ($_POST['visibility'] ?? $form['visibility']);
+    $form['visibility'] = in_array($postedVisibility, ['private', 'workspace'], true) ? $postedVisibility : 'workspace';
 
     if ($form['email_address'] === '' || !filter_var($form['email_address'], FILTER_VALIDATE_EMAIL)) {
         $errors[] = t('emails.email_invalid');
@@ -67,8 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             $stmt = $pdo->prepare('INSERT INTO emails
-                (email_address, display_name, provider, type, purpose, status, created_date, last_verified, notes, owner_user_id)
-                VALUES (:email_address, :display_name, :provider, :type, :purpose, :status, :created_date, :last_verified, :notes, :owner_user_id)');
+                (email_address, display_name, provider, type, purpose, status, created_date, last_verified, notes, visibility, owner_user_id)
+                VALUES (:email_address, :display_name, :provider, :type, :purpose, :status, :created_date, :last_verified, :notes, :visibility, :owner_user_id)');
             $stmt->execute([
                 'email_address' => $form['email_address'],
                 'display_name' => $form['display_name'] !== '' ? $form['display_name'] : null,
@@ -79,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'created_date' => $form['created_date'] !== '' ? $form['created_date'] : null,
                 'last_verified' => $form['last_verified'] !== '' ? $form['last_verified'] : null,
                 'notes' => $form['notes'] !== '' ? $form['notes'] : null,
+                'visibility' => $form['visibility'],
                 'owner_user_id' => currentUserId(),
             ]);
             $emailId = (int) $pdo->lastInsertId();
@@ -173,6 +180,14 @@ require __DIR__ . '/../../includes/header.php';
             <div class="col-md-3">
                 <label class="form-label"><?= e(t('common.field_last_verified')) ?></label>
                 <input type="date" name="last_verified" class="form-control" value="<?= e($form['last_verified']) ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><?= e(tOr('common.field_visibility', 'Visibility')) ?></label>
+                <select name="visibility" class="form-select">
+                    <option value="workspace" <?= $form['visibility'] === 'workspace' ? 'selected' : '' ?>><?= e(tOr('visibility.workspace', 'Workspace')) ?></option>
+                    <option value="private" <?= $form['visibility'] === 'private' ? 'selected' : '' ?>><?= e(tOr('visibility.private', 'Private')) ?></option>
+                </select>
+                <p class="text-muted small mb-0 mt-1"><?= e(tOr('common.field_visibility_hint', 'Private records are visible only to you and workspace owners/admins.')) ?></p>
             </div>
             <div class="col-12">
                 <label class="form-label"><?= e(t('common.field_notes')) ?></label>

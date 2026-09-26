@@ -28,6 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    requireEditRecord($service);
+
     $action = (string) ($_POST['action'] ?? '');
 
     if ($action === 'add_tag') {
@@ -83,7 +85,7 @@ $stmt = $pdo->prepare("SELECT a.id, a.username, a.status, a.last_verified, a.ide
     LEFT JOIN phones p ON p.id = a.identity_phone_id
     LEFT JOIN subscriptions sub ON sub.account_id = a.id
     LEFT JOIN account_security acs ON acs.account_id = a.id
-    WHERE a.service_id = ?
+    WHERE a.service_id = ? AND " . visibilityScope('accounts', 'a') . "
     ORDER BY COALESCE(e.email_address, p.phone_number, a.username, '')");
 $stmt->execute([$id]);
 $accounts = $stmt->fetchAll();
